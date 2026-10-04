@@ -37,4 +37,20 @@ Build output and personal NetBeans settings are ignored. Configure credentials l
 - Original Sarab source and documentation: `templates/sarab-1.0.0/`.
 - Application CSS, scripts, images, and fonts: `web/assets/`.
 - Customer and Seller registration are separate; Seller accounts do not require approval. Product listings still require Admin approval.
-- See `ITERATION1.md` for implemented features and current limitations.
+
+## Iteration 1 status
+
+Implemented: separate Customer/Seller registration, authentication and role checks, profiles and addresses, listing drafts and Admin review, variants and prices, stock batches and costs, catalog search and comparison, and carts grouped by seller.
+
+This is an initial implementation, not full Iteration 1 acceptance. Remaining work includes Seller autocomplete, normalized unit-price comparison, an explicit stock-availability filter, and more convenient edit forms.
+
+## Runtime notes and limitations
+
+- JDBC and other dependencies are included in `web/WEB-INF/lib`.
+- Password recovery writes `.eml` files to `freshora-private-outbox` under Tomcat base. Configure an email provider for actual delivery. `FRESHORA_PUBLIC_URL` controls the recovery-link base URL.
+- Uploaded listing images are stored in `freshora-uploads` under Tomcat base. Uploading a replacement image set returns the listing to Draft.
+- Sarab banner/About images are template placeholders; product images use uploaded data or a shared fruit illustration.
+- Cart operations do not reserve stock. A transactional FEFO reservation service exists; checkout, payments, delivery, and reservation timeout release remain for Iteration 2.
+- Sessions expire after 30 minutes of inactivity. Password changes do not yet revoke every session on other devices.
+- Legacy `/demo/*` routes are blocked. SQL helpers are in `dao/Database.java`; connection settings are in `config/DBConnect.java`. Some SQL remains in services and AdminServlet.
+- Build, JSP compilation, role access, registration, address creation, cart changes, listing approval, and reservation rollback/idempotency have been checked. Concurrent-load and comprehensive security testing are still pending.
