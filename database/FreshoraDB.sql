@@ -1,4 +1,4 @@
-﻿-- Freshora: run the entire file with F5 in normal SSMS. No SQLCMD mode needed.
+-- Freshora: run the entire file with F5 in normal SSMS. No SQLCMD mode needed.
 -- Existing database is left unchanged. No DROP, DELETE or reset is performed.
 USE master;
 SET NOCOUNT ON;
@@ -458,7 +458,7 @@ END;'';
     EXEC sys.sp_executesql N''SET XACT_ABORT ON;
 
 INSERT dbo.settings(type,name,value,priority) VALUES
-(''''CATEGORY'''',N''''Trái cây Việt Nam'''',NULL,1),(''''CATEGORY'''',N''''Trái cây nhập khẩu'''',NULL,2),
+(''''CATEGORY'''',N''''Vietnamese Fruit'''',NULL,1),(''''CATEGORY'''',N''''Imported Fruit'''',NULL,2),
 (''''SELLER_TIER'''',N''''Basic'''',N''''{"listing_limit":50,"commission_rate":0.05}'''',1),
 (''''MEMBERSHIP_TIER'''',N''''Bronze'''',N''''{"minimum_spend":0}'''',1),
 (''''POLICY'''',N''''reservation_timeout_minutes'''',N''''15'''',1),
@@ -468,29 +468,29 @@ INSERT dbo.users(email,password_hash,full_name,phone,role) VALUES
 (''''admin@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Freshora Admin'''',''''0900000001'''',''''ADMIN''''),
 (''''customer@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Khách hàng demo'''',''''0900000002'''',''''CUSTOMER''''),
 (''''seller@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Nhà vườn Freshora'''',''''0900000003'''',''''SELLER''''),
-(''''seller2@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Trái cây Xanh'''',''''0900000004'''',''''SELLER''''),
+(''''seller2@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Green Fruit Store'''',''''0900000004'''',''''SELLER''''),
 (''''delivery@freshora.demo'''',''''$2a$12$QQIBMWN2H8V1DBSmf1dA0.vzkdqg5.4LnMH2xIMOwY9mapCGxJCKa'''',N''''Nhân viên giao hàng'''',''''0900000005'''',''''DELIVERY_STAFF'''');
 INSERT dbo.addresses(user_id,recipient_name,phone,address_line,ward,district,city,is_default)
 SELECT id,full_name,phone,N''''01 Đường Demo'''',N''''Phường Demo'''',N''''Quận Demo'''',N''''Hà Nội'''',1 FROM dbo.users WHERE role IN (''''CUSTOMER'''',''''SELLER'''');
 INSERT dbo.stores(owner_id,store_name,pickup_address_id,seller_tier_id)
-SELECT u.id,CASE WHEN u.email=''''seller@freshora.demo'''' THEN N''''Freshora Garden'''' ELSE N''''Trái cây Xanh'''' END,a.id,3 FROM dbo.users u JOIN dbo.addresses a ON a.user_id=u.id WHERE u.role=''''SELLER'''';
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(1,1,N''''Cam sành'''',N''''Hà Giang'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(1,N''''Gói 1 kg'''',N''''kg'''',35000);
+SELECT u.id,CASE WHEN u.email=''''seller@freshora.demo'''' THEN N''''Freshora Garden'''' ELSE N''''Green Fruit Store'''' END,a.id,3 FROM dbo.users u JOIN dbo.addresses a ON a.user_id=u.id WHERE u.role=''''SELLER'''';
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(1,1,N''''King Oranges'''',N''''Hà Giang'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/oranges.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(1,N''''1 kg bag'''',N''''kg'''',35000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(1,''''DEMO-1'''',N''''Hà Giang'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,21000);
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(1,2,N''''Táo Fuji'''',N''''Nhật Bản'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(2,N''''Gói 1 kg'''',N''''kg'''',85000);
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(1,2,N''''Fuji Apples'''',N''''Nhật Bản'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/apples.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(2,N''''1 kg bag'''',N''''kg'''',85000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(2,''''DEMO-2'''',N''''Nhật Bản'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,51000);
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(1,1,N''''Xoài cát'''',N''''Đồng Tháp'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(3,N''''Gói 1 kg'''',N''''kg'''',65000);
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(1,1,N''''Cat Mangoes'''',N''''Đồng Tháp'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/mangoes.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(3,N''''1 kg bag'''',N''''kg'''',65000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(3,''''DEMO-3'''',N''''Đồng Tháp'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,39000);
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(2,1,N''''Nho xanh'''',N''''Ninh Thuận'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(4,N''''Gói 1 kg'''',N''''kg'''',120000);
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(2,1,N''''Green Grapes'''',N''''Ninh Thuận'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/grapes.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(4,N''''1 kg bag'''',N''''kg'''',120000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(4,''''DEMO-4'''',N''''Ninh Thuận'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,72000);
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(2,1,N''''Bưởi da xanh'''',N''''Bến Tre'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(5,N''''Gói 1 kg'''',N''''kg'''',55000);
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(2,1,N''''Green-Skin Pomelos'''',N''''Bến Tre'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/pomelo.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(5,N''''1 kg bag'''',N''''kg'''',55000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(5,''''DEMO-5'''',N''''Bến Tre'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,33000);
-INSERT dbo.listings(store_id,category_id,title,origin,description,status) VALUES(2,1,N''''Dưa hấu'''',N''''Long An'''',N''''Sản phẩm demo Freshora'''',''''APPROVED'''');
-INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(6,N''''Gói 1 kg'''',N''''kg'''',25000);
+INSERT dbo.listings(store_id,category_id,title,origin,description,status,image_urls) VALUES(2,1,N''''Watermelon'''',N''''Long An'''',N''''Freshora demo product'''',''''APPROVED'''',N''''["/assets/img/fruits/watermelon.jpg"]'''');
+INSERT dbo.variants(listing_id,option_name,unit,price) VALUES(6,N''''1 kg bag'''',N''''kg'''',25000);
 INSERT dbo.batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(6,''''DEMO-6'''',N''''Long An'''',DATEADD(day,-2,CONVERT(date,SYSUTCDATETIME())),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,14,CONVERT(date,SYSUTCDATETIME())),N''''Nhà cung cấp demo'''',100,100,15000);
 INSERT dbo.promotions(type,name,code,discount_type,discount_value,max_discount,min_spend,budget_limit,usage_limit,per_customer_limit,start_at,end_at,status)
 VALUES(''''VOUCHER'''',N''''Ưu đãi khai trương'''',''''FRESH10'''',''''PERCENT'''',10,50000,100000,1000000,100,1,SYSUTCDATETIME(),DATEADD(day,30,SYSUTCDATETIME()),''''RUNNING'''');

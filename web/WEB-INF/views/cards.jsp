@@ -3,8 +3,8 @@
         <c:forEach items="${products}" var="p">
             <div class="col-sm-6 col-lg-4">
                 <article class="mcard">
-                    <a class="mimg d-block" href="${pageContext.request.contextPath}/product?id=${p.listing_id}"><img src="${pageContext.request.contextPath}${empty p.image ? '/assets/img/fruit.svg' : fn:escapeXml(p.image)}" alt="${fn:escapeXml(p.title)}">
-                        <div class="mbdg new"><i class="fas fa-leaf"></i>Available</div>
+                    <a class="mimg d-block" href="${pageContext.request.contextPath}/product?id=${p.listing_id}"><img src="${pageContext.request.contextPath}${empty p.image ? '/assets/img/fruits/fruit-basket.jpg' : fn:escapeXml(p.image)}" alt="${fn:escapeXml(p.title)}">
+                        <div class="mbdg new"><i class="fas fa-leaf"></i>${p.available_qty > 0 ? 'Available' : 'Out of stock'}</div>
                     </a>
                     <div class="mbody">
                         <a class="mcat" href="${pageContext.request.contextPath}/shop?id=${p.store_id}">

@@ -60,7 +60,7 @@
                                                 </li>
                                             </c:when>
                                             <c:otherwise>
-                                                <li class="nav-item"><a class="nav-link" href="${pageContext.request.contextPath}/account">My account</a>
+<li class="nav-item"><a class="nav-link" href="${pageContext.request.contextPath}/account">My account</a>
                                                 </li>
                                                 <c:if test="${sessionScope.user.role == 'SELLER'}">
                                                     <li class="nav-item"><a class="nav-link" href="${pageContext.request.contextPath}/seller">Manage store</a>
@@ -105,6 +105,13 @@
                             </div>
                         </div>
                         <main class="${homePage ? 'home-page' : 'container pagebody'}">
+<c:if test="${not homePage && not empty sessionScope.user}"><nav aria-label="Workspace" class="d-flex flex-wrap gap-3 mb-4">
+<c:if test="${sessionScope.user.role == 'CUSTOMER' || sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/orders">My orders</a><a href="${pageContext.request.contextPath}/wallet">Reward points</a><a href="${pageContext.request.contextPath}/refunds">My refunds</a></c:if>
+<c:if test="${sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/seller/orders">Seller orders</a><a href="${pageContext.request.contextPath}/seller/promotions">Campaigns</a></c:if>
+<c:if test="${sessionScope.user.role == 'ADMIN'}"><a href="${pageContext.request.contextPath}/admin/orders">Fulfillment</a><a href="${pageContext.request.contextPath}/admin/promotions">Vouchers</a><a href="${pageContext.request.contextPath}/admin/refunds">Refund reviews</a></c:if>
+<c:if test="${sessionScope.user.role == 'DELIVERY_STAFF'}"><a href="${pageContext.request.contextPath}/delivery">Deliveries</a></c:if>
+</nav></c:if>
+
                             <c:if test="${not empty error}">
                                 <div role="alert" class="alert alert-danger">
                                     <c:out value="${error}" />

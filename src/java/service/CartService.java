@@ -9,11 +9,13 @@ public class CartService {
 
     public List<Map<String, Object>> lines(long uid) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.rows(c, "SELECT oi.id,oi.variant_id,oi.quantity,v.price AS unit_price,oi.quantity*v.price AS line_total,l.title,v.option_name,s.store_name,s.id AS store_id,COALESCE(st.available_qty,0) AS available_qty FROM orders o JOIN seller_orders so ON so.order_id=o.id JOIN stores s ON s.id=so.store_id JOIN order_items oi ON oi.seller_order_id=so.id JOIN variants v ON v.id=oi.variant_id JOIN listings l ON l.id=v.listing_id LEFT JOIN v_available_stock st ON st.variant_id=v.id WHERE o.customer_id=? AND o.status='CART' ORDER BY s.id,oi.id", uid);
+            return Database.rows(c, "SELECT oi.id,oi.variant_id,oi.quantity,oi.unit_price AS saved_price,v.price AS unit_price,CASE WHEN pub.variant_id IS NULL THEN 0 ELSE 1 END AS purchasable,oi.quantity*v.price AS line_total,l.title,v.option_name,s.store_name,s.id AS store_id,COALESCE(st.available_qty,0) AS available_qty FROM orders o JOIN seller_orders so ON so.order_id=o.id JOIN stores s ON s.id=so.store_id JOIN order_items oi ON oi.seller_order_id=so.id JOIN variants v ON v.id=oi.variant_id JOIN listings l ON l.id=v.listing_id LEFT JOIN v_available_stock st ON st.variant_id=v.id LEFT JOIN v_public_products pub ON pub.variant_id=v.id WHERE o.customer_id=? AND o.status='CART' ORDER BY s.id,oi.id", uid);
         }
     }
 
     public void change(long uid, String action, long target, int quantity) throws Exception {
+        if (!Set.of("add","update","remove").contains(action)) throw new IllegalArgumentException("Invalid action.");
+        if (!action.equals("remove") && (quantity<1 || quantity>10000)) throw new IllegalArgumentException("Quantity must be between 1 and 10,000.");
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {

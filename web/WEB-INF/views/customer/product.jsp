@@ -1,6 +1,6 @@
 <%@ page pageEncoding="UTF-8" %>
     <%@ include file="/WEB-INF/views/header.jsp" %>
-        <div class="detailgrid"><img class="detailimage" src="${pageContext.request.contextPath}${empty product.image ? '/assets/img/fruit.svg' : fn:escapeXml(product.image)}" alt="Fruit">
+        <div class="detailgrid"><img class="detailimage" src="${pageContext.request.contextPath}${empty product.image ? '/assets/img/fruits/fruit-basket.jpg' : fn:escapeXml(product.image)}" alt="Fruit">
             <div><span class="eyebrow"><c:out value="${product.origin}"/></span>
                 <h1><c:out value="${product.title}"/></h1>
                 <p>
@@ -20,9 +20,9 @@
                             <input type="hidden" name="action" value="add">
                             <input type="hidden" name="id" value="${v.id}">
                             <label>Quantity
-                                <input class="form-control" name="quantity" type="number" value="1" required>
+                                <input class="form-control" name="quantity" type="number" min="1" max="${v.available_qty}" value="1" required>
                             </label>
-                            <button class="button">Add to cart</button>
+                            <button class="button" ${v.available_qty le 0 ? 'disabled' : ''}>${v.available_qty le 0 ? 'Out of stock' : 'Add to cart'}</button>
                         </form>
                     </div>
                 </c:forEach>

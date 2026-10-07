@@ -9,6 +9,15 @@ import java.math.BigDecimal;
 
 public class SellerService {
 
+    public List<Map<String,Object>> suggestions(long uid,String query) throws Exception {
+        if(query==null || query.trim().length()<2) return List.of();
+        if(query.length()>200) throw new IllegalArgumentException("Product name is too long.");
+        long own;
+        try(Connection c=new DBConnect().getConnection()){own=store(c,uid);}
+        return new CatalogService().products(query,null,null,null,null,null,"priceDesc",false).stream()
+            .filter(x -> ((Number)x.get("store_id")).longValue()!=own).limit(10).toList();
+    }
+
     public long store(Connection c, long uid) throws Exception {
         Map<String, Object> s = Database.one(c, "SELECT id FROM stores WHERE owner_id=? AND status='ACTIVE'", uid);
         if (s == null) {

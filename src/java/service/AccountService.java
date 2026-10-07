@@ -23,7 +23,7 @@ public class AccountService {
                 throw new IllegalArgumentException("Incorrect email or password.");
             }
             Database.update(c, "UPDATE users SET last_login_at=SYSUTCDATETIME() WHERE id=?", u.get("id"));
-            return new SessionUser(((Number) u.get("id")).longValue(), (String) u.get("full_name"), (String) u.get("role"));
+            return new SessionUser(((Number) u.get("id")).longValue(), (String) u.get("full_name"), (String) u.get("role"), (String)u.get("password_hash"));
         }
     }
 
@@ -67,12 +67,16 @@ public class AccountService {
     public void password(long id, String old, String pass, String confirm) throws Exception {
         Validation.password(pass, confirm);
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WHERE id=?", id);
+            c.setAutoCommit(false);
+            try {
+            Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
             if (!matches(old, (String) u.get("password_hash"))) {
                 throw new IllegalArgumentException("The current password is incorrect.");
             }
             Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), id);
             Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", id);
+            c.commit();
+            } catch(Exception ex) {c.rollback();throw ex;}
         }
     }
 
@@ -96,7 +100,6 @@ public class AccountService {
                 } else {
                     name = Validation.text(name, 100);
                     phone = Validation.text(phone, 20);
-                    phone = Validation.text(phone, 20);
                     line = Validation.text(line, 255);
                     ward = Validation.text(ward, 100);
                     district = Validation.text(district, 100);
@@ -109,6 +112,9 @@ public class AccountService {
                     } else {
                         Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?", name, phone, line, ward, district, city, primary, aid, uid);
                     }
+                }
+                if (Database.one(c,"SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid)==null) {
+                    Database.update(c,"UPDATE addresses SET is_default=1 WHERE id=(SELECT MIN(id) FROM addresses WHERE user_id=?)",uid);
                 }
                 c.commit();
             } catch (Exception e) {
@@ -133,9 +139,12 @@ public class AccountService {
             String token = HexFormat.of().formatHex(random);
             Database.update(c, "INSERT password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,DATEADD(minute,20,SYSUTCDATETIME()))", u.get("id"), digest(token));
             String base = System.getenv().getOrDefault("FRESHORA_PUBLIC_URL", "http://localhost:9999/Freshora");
-            Path dir = Path.of(System.getProperty("catalina.base", System.getProperty("user.home")), "freshora-private-outbox");
-            Files.createDirectories(dir);
-            Files.writeString(dir.resolve(UUID.randomUUID() + ".eml"), "To: " + u.get("email") + "\nSubject: Freshora password reset (local development)\n\n" + base + "/reset?token=" + token + "\nExpires in 20 minutes.\n", StandardCharsets.UTF_8);
+            try {
+                new MailService().recovery((String)u.get("email"),base+"/reset?token="+token);
+            } catch(Exception e) {
+                Database.update(c,"DELETE FROM password_reset_tokens WHERE token_hash=?",digest(token));
+                throw e;
+            }
         }
     }
 
@@ -144,7 +153,11 @@ public class AccountService {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Map<String, Object> t = Database.one(c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", digest(token == null ? "" : token));
+                byte[] tokenHash=digest(token == null ? "" : token);
+                Map<String,Object> owner=Database.one(c,"SELECT user_id FROM password_reset_tokens WHERE token_hash=?",tokenHash);
+                if(owner==null) throw new IllegalArgumentException("This link has expired or has already been used.");
+                Database.one(c,"SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?",owner.get("user_id"));
+                Map<String, Object> t = Database.one(c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", tokenHash);
                 if (t == null) {
                     throw new IllegalArgumentException("This link has expired or has already been used.");
                 }

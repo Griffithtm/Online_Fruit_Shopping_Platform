@@ -34,12 +34,12 @@ public class SecurityFilter implements Filter {
         SessionUser u = (SessionUser) session.getAttribute("user");
         if (u != null) {
             try (Connection c = new DBConnect().getConnection()) {
-                Map<String, Object> db = Database.one(c, "SELECT id,full_name,role,status FROM users WHERE id=?", u.getId());
-                if (db == null || !"ACTIVE".equals(db.get("status"))) {
+                Map<String, Object> db = Database.one(c, "SELECT id,full_name,role,status,password_hash FROM users WHERE id=?", u.getId());
+                if (db == null || (!"ACTIVE".equals(db.get("status")) || !u.credentialsMatch((String)db.get("password_hash")))) {
                     session.removeAttribute("user");
                     u = null;
                 } else {
-                    u = new SessionUser(u.getId(), (String) db.get("full_name"), (String) db.get("role"));
+                    u = new SessionUser(u.getId(), (String) db.get("full_name"), (String) db.get("role"),(String)db.get("password_hash"));
                     session.setAttribute("user", u);
                 }
             } catch (Exception e) {
@@ -50,7 +50,7 @@ public class SecurityFilter implements Filter {
             s.sendError(404);
             return;
         }
-        boolean privatePath = path.startsWith("/account") || path.startsWith("/seller") || path.startsWith("/admin") || path.startsWith("/cart");
+        boolean privatePath = path.startsWith("/account") || path.startsWith("/seller") || path.startsWith("/admin") || path.startsWith("/cart") || path.equals("/checkout") || path.equals("/orders") || path.equals("/wallet") || path.equals("/refunds") || path.equals("/delivery") || path.equals("/payment/start");
         if (privatePath && u == null) {
             s.sendRedirect(r.getContextPath() + "/login");
             return;
@@ -59,7 +59,8 @@ public class SecurityFilter implements Filter {
             s.sendError(403);
             return;
         }
-        if (path.startsWith("/cart") && u != null && !Set.of("CUSTOMER", "SELLER").contains(u.getRole())) {
+        if(path.equals("/delivery") && (u==null || !"DELIVERY_STAFF".equals(u.getRole()))){s.sendError(403);return;}
+        if ((path.startsWith("/cart") || path.equals("/checkout") || path.equals("/orders") || path.equals("/wallet") || path.equals("/refunds") || path.equals("/payment/start")) && u != null && !Set.of("CUSTOMER", "SELLER").contains(u.getRole())) {
             s.sendError(403);
             return;
         }

@@ -8,30 +8,30 @@
                 <form method="post" action="">
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="listing">
-                    <label>Listing ID (leave blank to create)
-                        <input class="form-control" name="id" type="number" value="">
+                    <label>Listing ID (selected automatically)
+                        <input class="form-control" name="id" type="number" readonly value="${editListing.id}">
                     </label>
                     <label>Fruit name
-                        <input class="form-control" name="title" type="text" value="" required>
+                        <input class="form-control" name="title" maxlength="200" autocomplete="off" data-suggestions="${pageContext.request.contextPath}/seller/suggestions" data-product-url="${pageContext.request.contextPath}/product" type="text" value="${fn:escapeXml(editListing.title)}" required>
                     </label>
                     <label>Description
-                        <input class="form-control" name="description" type="text" value="" required>
+                        <input class="form-control" name="description" type="text" value="${fn:escapeXml(editListing.description)}" required>
                     </label>
                     <label>Category
                         <select class="form-select" name="category" required>
                             <c:forEach items="${categories}" var="x">
-                                <option value="${x.id}">
+                                <option value="${x.id}" ${editListing.category_id == x.id ? 'selected' : ''}>
                                     <c:out value="${x.name}" /> (#${x.id})</option>
                             </c:forEach>
                         </select>
                     </label>
                     <label>Origin
-                        <input class="form-control" name="origin" type="text" value="" required>
+                        <input class="form-control" name="origin" type="text" value="${fn:escapeXml(editListing.origin)}" required>
                     </label>
                     <label>Harvest information
-                        <input class="form-control" name="harvest" type="text" value="">
+                        <input class="form-control" name="harvest" type="text" value="${fn:escapeXml(editListing.harvest_info)}">
                     </label>
-                    <button class="button">Save draft</button>
+                    <button class="button">Save draft</button> <a href="${pageContext.request.contextPath}/seller">New listing</a>
                 </form>
             </section>
             <section class="panel">
@@ -39,27 +39,27 @@
                 <form method="post" action="">
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="variant">
-                    <label>Variant ID (leave blank to create)
-                        <input class="form-control" name="id" type="number" value="">
+                    <label>Variant ID (selected automatically)
+                        <input class="form-control" name="id" type="number" readonly value="${editVariant.id}">
                     </label>
                     <label>Listing
                         <select class="form-select" name="listing" required>
                             <c:forEach items="${listings}" var="x">
-                                <option value="${x.id}">
+                                <option value="${x.id}" ${editVariant.listing_id == x.id ? 'selected' : ''}>
                                     <c:out value="${x.title}" /> (#${x.id})</option>
                             </c:forEach>
                         </select>
                     </label>
                     <label>Pack size (1 kg bag, 500 g box...)
-                        <input class="form-control" name="option" type="text" value="" required>
+                        <input class="form-control" name="option" type="text" value="${fn:escapeXml(editVariant.option_name)}" required>
                     </label>
                     <label>Selling unit
-                        <input class="form-control" name="unit" type="text" value="" required>
+                        <input class="form-control" name="unit" type="text" value="${fn:escapeXml(editVariant.unit)}" required>
                     </label>
                     <label>Selling price (VND)
-                        <input class="form-control" name="price" type="number" value="" required>
+                        <input class="form-control" name="price" type="number" value="${fn:escapeXml(editVariant.price)}" required>
                     </label>
-                    <button class="button">Save variant</button>
+                    <button class="button">Save variant</button> <a href="${pageContext.request.contextPath}/seller">New variant</a>
                 </form>
             </section>
         </div>
@@ -87,7 +87,7 @@
                                 <input type="hidden" name="action" value="submit">
                                 <input type="hidden" name="id" value="${l.id}">
                                 <button class="button">Submit for review</button>
-                            </form><a href="?images=${l.id}">Reorder images</a>
+                            </form><a href="?editListing=${l.id}">Edit listing</a> · <a href="?images=${l.id}">Reorder images</a>
                         </td>
                     </tr>
                 </c:forEach>
@@ -152,7 +152,7 @@
                             <input type="hidden" name="action" value="retire">
                             <input type="hidden" name="id" value="${v.id}">
                             <input type="hidden" name="listing" value="${v.listing_id}">
-                            <button class="button">Retire</button>
+                            <button class="button">Retire</button> <a href="?editVariant=${v.id}">Edit variant</a>
                         </form>
                     </td>
                 </tr>
@@ -231,11 +231,12 @@
             <h2>Browse marketplace suggestions</h2>
             <form method="get">
                 <label>Enter a product name
-                    <input class="form-control" name="q" type="search" value="${fn:escapeXml(param.q)}">
+                    <input class="form-control" name="q" data-suggestions="${pageContext.request.contextPath}/seller/suggestions" data-product-url="${pageContext.request.contextPath}/product" type="search" value="${fn:escapeXml(param.q)}">
                 </label>
                 <button class="button">Find suggestions by descending price</button>
             </form>
             <c:set var="products" value="${suggestions}" />
             <%@ include file="/WEB-INF/views/cards.jsp" %>
         </section>
-        <%@ include file="/WEB-INF/views/footer.jsp" %>
+        <script src="${pageContext.request.contextPath}/assets/js/seller-suggestions.js?v=2" defer></script>
+<%@ include file="/WEB-INF/views/footer.jsp" %>

@@ -37,7 +37,7 @@
                         <div class="col-lg-6">
                             <div style="position:relative;text-align:center;">
                                 <div class="hcircle">
-                                    <img src="${pageContext.request.contextPath}/assets/img/banner-img.jpg" alt="Sarab food banner" />
+                                    <img src="${pageContext.request.contextPath}/assets/img/fruits/fruit-basket.jpg" alt="Fresh seasonal fruit basket" />
                                 </div>
                                 <div class="fcard fc1">
                                     <div class="fcoi r"><i class="fas fa-fire"></i>
@@ -111,9 +111,9 @@
                             <div class="astack">
                                 <div class="aexp"><span class="anum"><i class="fas fa-leaf"></i></span><small>Fresh choices<br>Every day</small>
                                 </div>
-                                <div class="amain"><img src="${pageContext.request.contextPath}/assets/img/about1.jpg" alt="Sarab dining atmosphere">
+                                <div class="amain"><img src="${pageContext.request.contextPath}/assets/img/fruits/fruit-orchard.jpg" alt="Fresh apples growing in an orchard">
                                 </div>
-                                <div class="asm"><img src="${pageContext.request.contextPath}/assets/img/about2.jpg" alt="Sarab food presentation">
+                                <div class="asm"><img src="${pageContext.request.contextPath}/assets/img/fruits/fresh-fruit.jpg" alt="A selection of fresh fruit">
                                 </div>
                             </div>
                         </div>

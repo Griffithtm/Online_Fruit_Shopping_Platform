@@ -21,10 +21,12 @@ public class SellerServlet extends BaseServlet {
             r.setAttribute("variants", service.variants(uid(r)));
             r.setAttribute("batches", service.batches(uid(r)));
             r.setAttribute("categories", new CatalogService().categories());
-            r.setAttribute("suggestions", new CatalogService().products(r.getParameter("q"), null, null, null, null, null, "priceDesc", false));
+            r.setAttribute("suggestions", service.suggestions(uid(r),r.getParameter("q")));
             if (r.getParameter("images") != null) {
                 r.setAttribute("images", service.images(uid(r), Validation.id(r.getParameter("images"))));
             }
+            if(r.getParameter("editListing")!=null) r.setAttribute("editListing", service.listings(uid(r)).stream().filter(x -> x.get("id").toString().equals(r.getParameter("editListing"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Listing not found.")));
+            if(r.getParameter("editVariant")!=null) r.setAttribute("editVariant", service.variants(uid(r)).stream().filter(x -> x.get("id").toString().equals(r.getParameter("editVariant"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Variant not found.")));
             view(r, s, "seller");
         } catch (Exception e) {
             r.setAttribute("error", error(e));

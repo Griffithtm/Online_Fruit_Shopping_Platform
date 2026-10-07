@@ -15,6 +15,8 @@ public class CatalogServlet extends BaseServlet {
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
             r.setAttribute("categories", service.categories());
+            r.setAttribute("shops", service.shops());
+            if (r.getServletPath().equals("/compare")) r.setAttribute("deliveryAreas",service.deliveryAreas());
             String p = r.getServletPath();
             if (p.equals("/shops")) {
                 r.setAttribute("shops", service.shops());
@@ -44,12 +46,12 @@ public class CatalogServlet extends BaseServlet {
                 }
                 r.setAttribute("shop", shop);
             }
-            r.setAttribute("products", service.products(r.getParameter("q"), r.getParameter("category"), store, r.getParameter("min"), r.getParameter("max"), r.getParameter("rating"), r.getParameter("sort"), "1".equals(r.getParameter("promo"))));
+            r.setAttribute("products", service.products(r.getParameter("q"), r.getParameter("category"), store, r.getParameter("min"), r.getParameter("max"), r.getParameter("rating"), r.getParameter("sort"), "1".equals(r.getParameter("promo")), r.getParameter("availability")));
             view(r, s, p.equals("/compare") ? "compare" : "products");
         } catch (IllegalArgumentException e) {
             r.setAttribute("error", e.getMessage());
             r.setAttribute("products", List.of());
-            view(r, s, "products");
+            view(r, s, r.getServletPath().equals("/compare") ? "compare" : "products");
         } catch (Exception e) {
             throw new ServletException(e);
         }

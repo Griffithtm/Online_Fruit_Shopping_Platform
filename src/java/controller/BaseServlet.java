@@ -19,8 +19,9 @@ public abstract class BaseServlet extends HttpServlet {
                 "auth/auth";
             case "seller" ->
                 "seller/seller";
-            case "account", "cart", "compare", "product", "products", "shops" ->
+            case "checkout", "orders", "account", "cart", "compare", "product", "products", "shops" ->
                 "customer/" + name;
+            case "fulfillment", "promotions", "wallet", "refunds", "payment" -> name;
             case "home" ->
                 "home";
             default ->

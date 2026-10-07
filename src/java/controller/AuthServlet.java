@@ -51,7 +51,7 @@ public class AuthServlet extends BaseServlet {
                     service.forgot(r.getParameter("email"));
                     r.getSession().setAttribute("lastRecovery", System.currentTimeMillis());
                 }
-                r.setAttribute("message", "If the email exists, recovery instructions will be generated. Local mode saves the email in the server outbox.");
+                r.setAttribute("message", "If the email exists, password recovery instructions have been sent. Check your inbox and spam folder.");
                 doGet(r, s);
                 return;
             } else if (p.equals("/reset")) {
