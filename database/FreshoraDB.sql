@@ -1,5 +1,5 @@
 -- Freshora: run the entire file with F5 in normal SSMS. No SQLCMD mode needed.
--- Existing database is left unchanged. No DROP, DELETE or reset is performed.
+-- Creates a new database or upgrades the existing database without resetting business records.
 USE master;
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
@@ -13,11 +13,11 @@ SET NUMERIC_ROUNDABORT OFF;
 
 IF DB_ID(N'FreshoraDB') IS NOT NULL
 BEGIN
-    PRINT N'FreshoraDB already exists. Installation skipped; existing data is unchanged.';
+    PRINT N'FreshoraDB already exists. Applying schema and catalog updates.';
     PRINT N'Use FreshoraDB to connect your application. Do not delete the database to rerun this file.';
-    RETURN;
-END;
-
+END
+ELSE
+BEGIN
 BEGIN TRY
     EXEC(N'CREATE DATABASE FreshoraDB COLLATE Latin1_General_100_CI_AS_SC');
     EXEC sys.sp_executesql N'USE FreshoraDB;
@@ -505,3 +505,51 @@ BEGIN CATCH
     PRINT N'Installation failed. No existing database was deleted. Inspect the error before retrying.';
     THROW;
 END CATCH;
+
+END;
+
+-- Integrated Iteration2.sql
+EXEC sys.sp_executesql N'USE FreshoraDB;
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+IF COL_LENGTH(''dbo.seller_orders'',''delivery_fee'') IS NULL
+ EXEC(''ALTER TABLE dbo.seller_orders ADD delivery_fee decimal(15,2) NOT NULL DEFAULT 0, discount_amount decimal(15,2) NOT NULL DEFAULT 0, points_discount decimal(15,2) NOT NULL DEFAULT 0, commission_rate decimal(9,6) NULL, net_payable decimal(15,2) NULL'');
+IF COL_LENGTH(''dbo.transactions'',''remaining_points'') IS NULL
+ EXEC(''ALTER TABLE dbo.transactions ADD remaining_points int NULL, evidence_url nvarchar(500) NULL'');
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''cancellation_window_minutes'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''cancellation_window_minutes'',''30'');
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''delivery_eta_hours'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''delivery_eta_hours'',''24'');
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''points_earn_vnd'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''points_earn_vnd'',''10000'');
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''points_expiry_days'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''points_expiry_days'',''365'');
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''refund_window_days'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''refund_window_days'',''7'');
+COMMIT;
+IF COL_LENGTH(''dbo.seller_orders'',''points_used'') IS NULL ALTER TABLE dbo.seller_orders ADD points_used int NOT NULL DEFAULT 0;
+IF COL_LENGTH(''dbo.transactions'',''provider_create_date'') IS NULL ALTER TABLE dbo.transactions ADD provider_create_date varchar(14) NULL;
+IF COL_LENGTH(''dbo.order_items'',''product_title'') IS NULL ALTER TABLE dbo.order_items ADD product_title nvarchar(200) NULL, variant_name nvarchar(100) NULL;
+IF COL_LENGTH(''dbo.seller_orders'',''store_name_snapshot'') IS NULL ALTER TABLE dbo.seller_orders ADD store_name_snapshot nvarchar(100) NULL;
+
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''membership_period_days'') INSERT settings(type,name,value) VALUES(''POLICY'',''membership_period_days'',''365'');
+';
+
+-- Integrated EnglishFruitCatalog.sql
+EXEC sys.sp_executesql N'USE FreshoraDB;
+SET XACT_ABORT ON;
+BEGIN TRANSACTION;
+UPDATE dbo.listings SET title=N''King Oranges'', image_urls=N''["/assets/img/fruits/oranges.jpg"]'' WHERE title IN (N''Cam sành'',N''King Oranges'');
+UPDATE dbo.listings SET title=N''Fuji Apples'', image_urls=N''["/assets/img/fruits/apples.jpg"]'' WHERE title IN (N''Táo Fuji'',N''Fuji Apples'');
+UPDATE dbo.listings SET title=N''Cat Mangoes'', image_urls=N''["/assets/img/fruits/mangoes.jpg"]'' WHERE title IN (N''Xoài cát'',N''Cat Mangoes'');
+UPDATE dbo.listings SET title=N''Green Grapes'', image_urls=N''["/assets/img/fruits/grapes.jpg"]'' WHERE title IN (N''Nho xanh'',N''Green Grapes'');
+UPDATE dbo.listings SET title=N''Green-Skin Pomelos'', image_urls=N''["/assets/img/fruits/pomelo.jpg"]'' WHERE title IN (N''Bưởi da xanh'',N''Green-Skin Pomelos'');
+UPDATE dbo.listings SET title=N''Watermelon'', image_urls=N''["/assets/img/fruits/watermelon.jpg"]'' WHERE title IN (N''Dưa hấu'',N''Watermelon'');
+UPDATE dbo.stores SET store_name=N''Green Fruit Store'' WHERE store_name=N''Trái cây Xanh'';
+UPDATE dbo.variants SET option_name=N''1 kg bag'' WHERE option_name=N''Gói 1 kg'';
+UPDATE dbo.listings SET description=N''Freshora demo product'' WHERE description=N''Sản phẩm demo Freshora'';
+UPDATE dbo.settings SET name=N''Vietnamese Fruit'' WHERE name=N''Trái cây Việt Nam'';
+UPDATE dbo.settings SET name=N''Imported Fruit'' WHERE name=N''Trái cây nhập khẩu'';
+COMMIT;
+';
+PRINT N'Freshora database installation/upgrade completed.';

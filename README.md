@@ -32,7 +32,7 @@ Build output and personal NetBeans settings are ignored. Configure credentials l
 
 ## Database and template
 
-- Run `database/FreshoraDB.sql` in SQL Server Management Studio with F5. The installer skips an existing FreshoraDB and does not reset its data.
+- Run `database/FreshoraDB.sql` in SQL Server Management Studio with F5. The script creates FreshoraDB if missing, then applies Iteration 2 schema and English catalog updates without resetting existing business records.
 - Edit `URL`, `USER`, and `PASSWORD` directly in `src/java/config/DBConnect.java` for your machine. The committed password is `CHANGE_ME`.
 - Original Sarab source and documentation: `templates/sarab-1.0.0/`.
 - Application CSS, scripts, images, and fonts: `web/assets/`.
@@ -51,7 +51,7 @@ Customer and Seller registration remain separate. Iteration 2 adds checkout, ful
 - JDBC and other dependencies are included in `web/WEB-INF/lib`.
 - Password recovery supports Gmail SMTP with STARTTLS and an App Password. See configuration below. Explicit local outbox mode is also available.
 - Uploaded listing images are stored in `freshora-uploads` under Tomcat base. Uploading a replacement image set returns the listing to Draft.
-- Banner, About and demo product images use local fruit photos. Existing databases can run database/EnglishFruitCatalog.sql to update demo product/store names and image paths; new installations already include these values.
+- Banner, About and demo product images use local fruit photos. Run database/FreshoraDB.sql to apply the included English demo catalog and image paths.
 - Cart operations do not reserve stock. Checkout reserves stock with transactional FEFO allocation. Cancellation, rejection and payment expiry release holds; delivery consumes them.
 - Sessions expire after 30 minutes of inactivity. Password changes and recovery invalidate previous sessions on their next request.
 - Legacy `/demo/*` routes are blocked. SQL helpers are in `dao/Database.java`; connection settings are in `config/DBConnect.java`. Some SQL remains in services and AdminServlet.
@@ -80,7 +80,7 @@ Verification on 2026-10-07: 18 service assertions and 28 HTTP/SMTP checks passed
 
 ## Iteration 2 setup
 
-After the initial database installation (or for an existing database), run `database/Iteration2.sql` before deploying this version. It is safe to rerun and preserves existing records. The current local database has been upgraded. Rebuild and redeploy the WAR.
+For both a new installation and an existing database, run the single script `database/FreshoraDB.sql` before deploying this version. It is safe to rerun and preserves existing records. The current local database has been upgraded. Rebuild and redeploy the WAR.
 
 Routes: `/checkout`, `/orders`, `/wallet`, `/refunds`, `/seller/orders`, `/seller/promotions`, `/admin/orders`, `/admin/promotions`, `/admin/refunds`, `/delivery`.
 
