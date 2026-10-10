@@ -95,7 +95,7 @@ public class SellerService {
         int q = Validation.quantity(qty);
         BigDecimal amount = Validation.money(cost, true);
         LocalDate h = LocalDate.parse(harvest), r = LocalDate.parse(receipt), e = LocalDate.parse(expiry);
-        if (h.isAfter(r) || !r.isBefore(e) || !e.isAfter(LocalDate.now()) || r.isAfter(LocalDate.now())) {
+        if (h.isAfter(r) || !r.isBefore(e) || !e.isAfter(LocalDate.now()) || !r.isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Harvest date must not exceed receipt date; receipt date must not be in the future; expiry date must be in the future.");
         }
         try (Connection c = new DBConnect().getConnection()) {

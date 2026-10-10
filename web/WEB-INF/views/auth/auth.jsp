@@ -34,7 +34,7 @@
                     <p>Your store is active immediately after registration. No existing Customer account is required.</p>
                 </c:if>
                 <input type="hidden" name="token" value="${fn:escapeXml(param.token)}">
-                <button class="button">Continue</button>
+                <button class="button">Continue</button>    
             </form>
             <hr><a href="${pageContext.request.contextPath}/forgot">Forgot password?</a> · <a href="${pageContext.request.contextPath}/register/customer">New customer</a> · <a href="${pageContext.request.contextPath}/register/seller">Register as a Seller</a>
         </section>

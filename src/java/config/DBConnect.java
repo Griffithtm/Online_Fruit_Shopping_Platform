@@ -8,7 +8,7 @@ public class DBConnect {
 
     private static final String URL = "jdbc:sqlserver://localhost:1433;databaseName=FreshoraDB;encrypt=true;trustServerCertificate=true";
     private static final String USER = "sa";
-    private static final String PASSWORD = "CHANGE_ME";
+    private static final String PASSWORD = "Pkhang2003cd";
 
     public Connection getConnection() throws SQLException {
         try {
