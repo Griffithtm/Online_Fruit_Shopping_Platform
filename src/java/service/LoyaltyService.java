@@ -33,7 +33,7 @@ public class LoyaltyService {
  public static Map<String,Object> membership(Connection c,long uid)throws Exception{
   int days=FulfillmentService.policy(c,"membership_period_days",365);
   Map<String,Object> progress=new HashMap<>();progress.put("periodDays",days);
-  Map<String,Object> spend=Database.one(c,"SELECT COALESCE(SUM(so.subtotal-so.discount_amount-so.points_discount),0) AS amount FROM seller_orders so JOIN orders o ON o.id=so.order_id WHERE o.customer_id=? AND so.status='DELIVERED' AND so.delivered_at>=DATEADD(day,-?,SYSUTCDATETIME()) AND NOT EXISTS(SELECT 1 FROM transactions t WHERE t.seller_order_id=so.id AND t.type='REFUND' AND t.status='REFUNDED')",uid,days);
+  Map<String,Object> spend=Database.one(c,"SELECT COALESCE(SUM(so.subtotal-so.discount_amount-so.points_discount),0) AS amount FROM seller_orders so JOIN orders o ON o.id=so.order_id WHERE o.customer_id=? AND so.status='DELIVERED' AND so.delivered_at>=DATEADD(day,-?,SYSUTCDATETIME()) AND NOT EXISTS(SELECT 1 FROM transactions t WHERE t.seller_order_id=so.id AND t.type='REFUND' AND t.status='REFUNDED' AND t.refund_scope='PURCHASE')",uid,days);
   BigDecimal amount=(BigDecimal)spend.get("amount");progress.put("qualifyingSpend",amount);
   List<Map<String,Object>> rules=Database.rows(c,"SELECT id,name,TRY_CONVERT(decimal(15,2),JSON_VALUE(CASE WHEN ISJSON(value)=1 THEN value ELSE '{}' END,'$.minimum_spend')) AS threshold FROM settings WHERE type='MEMBERSHIP_TIER' AND status='ACTIVE' ORDER BY threshold,priority,id");
   Map<String,Object> current=null,next=null;

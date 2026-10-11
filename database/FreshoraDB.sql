@@ -552,4 +552,11 @@ UPDATE dbo.settings SET name=N''Vietnamese Fruit'' WHERE name=N''Trái cây Vi�
 UPDATE dbo.settings SET name=N''Imported Fruit'' WHERE name=N''Trái cây nhập khẩu'';
 COMMIT;
 ';
+
+
+-- Refund classification preserves rewards and settlement for duplicate payments.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.transactions'',''refund_scope'') IS NULL ALTER TABLE dbo.transactions ADD refund_scope varchar(20) NOT NULL CONSTRAINT df_refund_scope DEFAULT ''PURCHASE'';
+';
+
 PRINT N'Freshora database installation/upgrade completed.';
