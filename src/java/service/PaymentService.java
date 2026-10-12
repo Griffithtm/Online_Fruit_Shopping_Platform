@@ -32,7 +32,7 @@ public class PaymentService {
     else {
      if("AWAITING_PAYMENT".equals(o.get("status")))expire(c,o);
      // A late payment is recorded, never used to revive an expired order.
-     for(Map<String,Object> so:Database.rows(c,"SELECT * FROM seller_orders WHERE order_id=?",o.get("id")))FinanceService.requestAutomatic(c,o,so,ref,"Late payment received after expiry");
+     for(Map<String,Object> so:Database.rows(c,"SELECT * FROM seller_orders WHERE order_id=?",o.get("id")))FinanceService.requestAutomatic(c,o,so,ref,"AWAITING_PAYMENT".equals(o.get("status")) || "EXPIRED".equals(o.get("status")) || "CANCELLED".equals(o.get("status"))?"Late payment after expiry or cancellation":"Duplicate payment for confirmed order",Set.of("CONFIRMED","COMPLETED").contains(o.get("status")));
     }
    }
    Database.update(c,"INSERT integration_events(provider,event_key,event_type,status) VALUES('VNPAY',?,'PAYMENT_IPN','PROCESSED')",ref+":"+gatewayRef+":"+p.get("vnp_ResponseCode")+":"+p.get("vnp_TransactionStatus"));

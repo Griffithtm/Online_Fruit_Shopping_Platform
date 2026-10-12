@@ -116,3 +116,23 @@ Delivery fee is split equally between sellers; the last seller receives the roun
 Compile Java tests against `build/web/WEB-INF/classes` and `web/WEB-INF/lib/*` with a separate output directory and empty sourcepath. Tests create I2-prefixed fixtures and preserve immutable financial history. Fixture users are suspended and listings hidden afterward; use a disposable database for repeated runs.
 
 Membership uses qualifying delivered merchandise spending over a configurable rolling `membership_period_days` (default 365), excluding refunded seller orders. The wallet shows next-tier progress; actual tier changes generate notifications. Missing eligible tier rules retain the current tier and show a warning. Existing order prices remain unchanged.
+
+## Iterations 1 and 2 audit (2026-10-11)
+
+Reviewed against CRMS rows 2-90 in Project Tracking. The old seller-application and approval entries are superseded by the requested separate Customer/Seller registration; selling access does not await Admin approval.
+
+| Scope | Implemented flows | Verification |
+| --- | --- | --- |
+| Iteration 1: FE-01 | Accounts, sessions, recovery, profiles, addresses, role/store restrictions | Service and HTTP checks; local SMTP recovery |
+| Iteration 1: FE-02 | Listing drafts, images/reordering, review, variants, competitive suggestions, pricing, batches and atomic reservation | Code review, service and HTTP checks |
+| Iteration 1: FE-03 / FE-04.1 | Browsing, filtering, sorting, comparison, seller-grouped carts | Service and HTTP checks |
+| Iteration 2: FE-04.2 / FE-05 | Revalidation, checkout totals, holds/releases, order history/cancellation, seller fulfillment | Service, concurrency and HTTP checks |
+| Iteration 2: FE-06 | COD, signed VNPay messages, refunds, commission and settlement | Local signed fixtures; real VNPay sandbox acceptance remains pending |
+| Iteration 2: FE-07 | Assignment, pickup, delivery events, evidence and COD collection | Service state-transition checks and role guards |
+| Iteration 2: FE-08 / FE-09 | Campaigns, vouchers, redemption limits, points ledger and membership | Service, concurrency and HTTP checks |
+
+This audit fixed resubmission after refund rejection, repeated completed-refund requests reopening disputes, legacy cancellation bypassing time limits and benefit restoration, and exhausted automatic campaigns blocking checkout. Automatic campaigns now fall back to normal price when ineligible; explicitly entered invalid vouchers still report validation errors.
+
+Duplicate-payment compensation uses `transactions.refund_scope=EXCESS_PAYMENT`; completing it does not reverse purchase rewards or reduce seller settlement. Purchase refunds use `PURCHASE`. Run the single `database/FreshoraDB.sql` before deploying this update. The script was tested both as a fresh install and a repeat upgrade on a separate audit database. Existing historical refund rows default to PURCHASE; investigate any historical duplicate-payment compensation separately before settlement.
+
+The regression run passed 109 Java assertions and 52 HTTP/SMTP checks on an isolated database, including `test/RefundLifecycleChecks.java`. These are targeted regression checks, not proof of every possible input or provider behavior. The application builds successfully. Real Gmail delivery and real VNPay sandbox payment/refund/IPN still require configured service credentials and a reachable callback URL. Do not mark those external acceptance items Done based only on fixtures.

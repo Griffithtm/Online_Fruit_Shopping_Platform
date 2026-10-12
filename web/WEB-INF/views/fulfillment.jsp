@@ -1,6 +1,6 @@
 <%@ page pageEncoding="UTF-8" %><%@ include file="/WEB-INF/views/header.jsp" %>
 <h1>Order fulfillment</h1><c:if test="${sessionScope.user.role == 'SELLER'}"><form method="post" class="panel"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><input type="hidden" name="action" value="pickupAddress"><label>Store pickup address<select name="address" required class="form-control"><c:forEach items="${pickupAddresses}" var="a"><option value="${a.id}"><c:out value="${a.address_line}, ${a.city}"/></option></c:forEach></select></label><button class="button">Set pickup address</button><p>Add addresses in My account.</p></form></c:if>
-<p><a href="${pageContext.request.contextPath}/seller/promotions">Seller campaigns</a></p>
+<c:if test="${sessionScope.user.role == 'SELLER'}"><p><a href="${pageContext.request.contextPath}/seller/promotions">Seller campaigns</a></p></c:if>
 <c:if test="${empty sellerOrders}"><p>No orders to display.</p></c:if>
 <c:forEach items="${sellerOrders}" var="o"><section class="panel">
 <h2><c:out value="${o.order_code} - ${o.store_name}"/> (#${o.id})</h2>

@@ -6,7 +6,7 @@ import java.sql.*;
 import java.math.BigDecimal;
 import java.util.*;
 
-/** COD checkout. All totals and stock are verified on the server. */
+/** Checkout. All totals and stock are verified on the server. */
 public class CheckoutService {
     public Map<String,Object> quote(long uid,long addressId) throws Exception { return quote(uid,addressId,"",0,"COD"); }
     public Map<String,Object> quote(long uid,long addressId,String voucher,int points,String method) throws Exception {
@@ -38,7 +38,7 @@ public class CheckoutService {
         for(Map<String,Object> line:lines){long sid=FulfillmentService.id(line.get("seller_order_id"));Map<String,Object> g=groups.computeIfAbsent(sid,k->{Map<String,Object> m=new LinkedHashMap<>();m.put("subtotal",BigDecimal.ZERO);m.put("discount",BigDecimal.ZERO);m.put("storeName",line.get("store_name"));return m;});BigDecimal amount=((BigDecimal)line.get("price")).multiply(new BigDecimal(line.get("quantity").toString()));g.put("subtotal",((BigDecimal)g.get("subtotal")).add(amount));if(line.get("campaign_id")!=null){long pid=FulfillmentService.id(line.get("campaign_id"));campaignBases.merge(pid,amount,BigDecimal::add);campaignSeller.put(pid,sid);}}
         for(var entry:campaignBases.entrySet()){
             Map<String,Object> promo=PromotionService.active(c,entry.getKey());
-            if(promo!=null){BigDecimal d=PromotionService.discount(c,uid,promo,entry.getValue());discounts.put(entry.getKey(),d);Map<String,Object> g=groups.get(campaignSeller.get(entry.getKey()));g.put("discount",((BigDecimal)g.get("discount")).add(d));}
+            if(promo!=null){BigDecimal d;try{d=PromotionService.discount(c,uid,promo,entry.getValue());}catch(IllegalArgumentException ineligible){continue;}if(d.signum()==0)continue;discounts.put(entry.getKey(),d);Map<String,Object> g=groups.get(campaignSeller.get(entry.getKey()));g.put("discount",((BigDecimal)g.get("discount")).add(d));}
         }
         BigDecimal campaignTotal=discounts.values().stream().reduce(BigDecimal.ZERO,BigDecimal::add),voucherDiscount=BigDecimal.ZERO;
         Long voucherId=null;
@@ -115,6 +115,7 @@ public class CheckoutService {
                 Map<String,Object> o=Database.one(c,"SELECT * FROM orders WITH(UPDLOCK,HOLDLOCK) WHERE id=? AND customer_id=?",oid,uid);
                 if(o==null)throw new IllegalArgumentException("Order not found.");
                 if("CANCELLED".equals(o.get("status"))){c.commit();return;}
+                if(Database.one(c,"SELECT id FROM orders WHERE id=? AND placed_at>=DATEADD(minute,-?,SYSUTCDATETIME())",oid,FulfillmentService.policy(c,"cancellation_window_minutes",30))==null)throw new IllegalArgumentException("The cancellation window has expired.");
                 List<Map<String,Object>> sellers=Database.rows(c,"SELECT id,status FROM seller_orders WITH(UPDLOCK,HOLDLOCK) WHERE order_id=? ORDER BY store_id,id",oid);
                 if(!"CONFIRMED".equals(o.get("status")) || !"COD".equals(o.get("payment_method")) || sellers.stream().anyMatch(x->!"NEW".equals(x.get("status"))))throw new IllegalArgumentException("This order can no longer be cancelled.");
                 if(Database.one(c,"SELECT id FROM transactions WITH(UPDLOCK,HOLDLOCK) WHERE order_id=? AND status IN ('PAID','COMPLETED')",oid)!=null)throw new IllegalArgumentException("Paid orders require a refund review.");
@@ -122,6 +123,7 @@ public class CheckoutService {
                 Database.update(c,"UPDATE seller_orders SET status='CANCELLED',updated_at=SYSUTCDATETIME() WHERE order_id=?",oid);
                 for(Map<String,Object> so:sellers)new StockReservationService().release(c,((Number)so.get("id")).longValue());
                 Database.update(c,"UPDATE transactions SET status='EXPIRED',updated_at=SYSUTCDATETIME() WHERE order_id=? AND type='COD' AND status='PENDING'",oid);
+                BenefitsService.returnAll(c,o);
                 c.commit();
             }catch(Exception e){c.rollback();throw e;}
         }
