@@ -38,6 +38,7 @@ public class IterationTwoChecks {
    CartService cart=new CartService();CheckoutService checkout=new CheckoutService();FulfillmentService flow=new FulfillmentService();
    cart.change(buyer,"add",variant,2);cart.change(buyer,"add",variant2,1);
    long oid=place("",0,"COD"),first=sid(oid,store),second=sid(oid,store2);
+   check(n(one("SELECT delivery_address_id FROM orders WHERE id=?",oid).get("delivery_address_id"))==address,"placed order records the chosen delivery_address_id");
    check(n(one("SELECT SUM(reserved_qty) n FROM batches WHERE variant_id IN (?,?)",variant,variant2).get("n"))==3,"all sellers reserved");
    reject(()->flow.change(seller,"SELLER",first,"reject","",null,false),"rejection requires reason");
    flow.change(other,"SELLER",second,"reject","Unable to fulfill",null,false);

@@ -61,20 +61,12 @@ public class AccountServlet extends BaseServlet {
                 redirect(r,s,"/login?success=1");
                 return;
             } else if (java.util.Set.of("saveAddress", "deleteAddress", "defaultAddress").contains(a)) {
-                service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), city(r), "on".equals(r.getParameter("primary")));
-                if ("saveAddress".equals(a)) {
-                    r.getSession().setAttribute("flash", Messages.get(Messages.MSG05, "Address"));
-                    redirect(r, s, "/account");
-                    return;
-                } else if ("defaultAddress".equals(a)) {
-                    r.getSession().setAttribute("flash", Messages.get(Messages.MSG18));
-                    redirect(r, s, "/account");
-                    return;
-                }
+                String message = service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), city(r), "on".equals(r.getParameter("primary")));
+                r.getSession().setAttribute("flash", message);
+                redirect(r, s, "/account");
             } else {
                 throw new IllegalArgumentException("Invalid action.");
             }
-            redirect(r, s, "/account?saved=1");
         } catch (Exception e) {
             if ("profile".equals(r.getParameter("action"))) {
                 // Keep what the user typed (NFR-UX-01); keys match the profile row used by the JSP.

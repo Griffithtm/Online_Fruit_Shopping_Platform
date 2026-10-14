@@ -139,7 +139,11 @@ public class AccountService {
         return "CUSTOMER".equals(role) || "SELLER".equals(role);
     }
 
-    public void address(long uid, String action, String id, String name, String phone, String line, String ward, String district, String city, boolean primary) throws Exception {
+    /**
+     * Saves, deletes or sets the default address of the current user and returns the success message.
+     * {@code primary} only applies to a new address; an edit never changes which address is the default (BA-04).
+     */
+    public String address(long uid, String action, String id, String name, String phone, String line, String ward, String district, String city, boolean primary) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
@@ -147,11 +151,11 @@ public class AccountService {
                 if (!canManageAddresses(users.lockRole(c, uid))) {
                     throw Messages.error(Messages.MSG12);
                 }
+                boolean delete = action.equals("deleteAddress");
                 Long aid = addressId(id);
-                if (aid != null && !addressDao.existsForUser(c, aid, uid)) {
+                if ((aid == null && (delete || action.equals("defaultAddress"))) || (aid != null && !addressDao.existsForUser(c, aid, uid))) {
                     throw Messages.error(Messages.MSG12);
                 }
-                boolean delete = action.equals("deleteAddress");
                 if ((delete || action.equals("saveAddress")) && aid != null) {
                     if (addressDao.usedByOpenOrder(c, aid, uid)) {
                         throw Messages.error(Messages.MSG19);
@@ -160,11 +164,24 @@ public class AccountService {
                         throw Messages.error(Messages.MSG19);
                     }
                 }
+                String message;
                 if (delete) {
+                    boolean wasDefault = addressDao.isDefault(c, aid, uid);
                     addressDao.delete(c, aid, uid);
+                    message = Messages.get(Messages.MSG81);
+                    if (wasDefault) {
+                        // The oldest remaining address takes over, and the user is told which one.
+                        addressDao.makeFirstDefault(c, uid);
+                        Map<String, Object> next = addressDao.findDefault(c, uid);
+                        if (next != null) {
+                            message = Messages.get(Messages.MSG82, next.get("recipient_name") + " - " + next.get("address_line") + ", "
+                                    + next.get("ward") + ", " + next.get("district") + ", " + next.get("city"));
+                        }
+                    }
                 } else if (action.equals("defaultAddress")) {
                     addressDao.clearDefault(c, uid);
                     addressDao.setDefault(c, aid, uid);
+                    message = Messages.get(Messages.MSG18);
                 } else {
                     Map<String, String> errors = new LinkedHashMap<>();
                     String n = name, p = phone, l = line, w = ward, d = district, ct = city;
@@ -175,19 +192,20 @@ public class AccountService {
                     district = FieldErrors.check(errors, "district", () -> Validation.field(d, 100, "district", true));
                     city = FieldErrors.check(errors, "city", () -> Validation.field(ct, 100, "province/city", true));
                     FieldErrors.throwIfAny(errors);
-                    if (primary) {
-                        addressDao.clearDefault(c, uid);
-                    }
                     if (aid == null) {
-                        addressDao.insert(c, uid, name, phone, line, ward, district, city, primary);
+                        // The first address is always the default.
+                        boolean makeDefault = primary || !addressDao.hasDefault(c, uid);
+                        if (makeDefault) {
+                            addressDao.clearDefault(c, uid);
+                        }
+                        addressDao.insert(c, uid, name, phone, line, ward, district, city, makeDefault);
                     } else {
-                        addressDao.update(c, aid, uid, name, phone, line, ward, district, city, primary);
+                        addressDao.update(c, aid, uid, name, phone, line, ward, district, city);
                     }
-                }
-                if (!addressDao.hasDefault(c, uid)) {
-                    addressDao.makeFirstDefault(c, uid);
+                    message = Messages.get(Messages.MSG05, "Address");
                 }
                 c.commit();
+                return message;
             } catch (Exception e) {
                 c.rollback();
                 throw e;

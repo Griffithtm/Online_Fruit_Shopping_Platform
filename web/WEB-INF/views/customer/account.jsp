@@ -46,10 +46,24 @@
         <div class="productgrid">
             <c:forEach items="${addresses}" var="a">
                 <c:set var="fid" value="${a.id}" />
+                <c:set var="isNewForm" value="false" />
                 <c:set var="failed" value="${addressFormId == fid.toString()}" />
                 <c:set var="af" value="${failed ? addressForm : a}" />
                 <c:set var="fe" value="${failed ? fieldErrors : null}" />
                 <section class="panel">
+                    <c:choose>
+                        <c:when test="${a.is_default}">
+                            <p><span class="badge bg-success">Default address</span></p>
+                        </c:when>
+                        <c:otherwise>
+                            <form method="post" action="">
+                                <input type="hidden" name="csrf" value="${sessionScope.csrf}">
+                                <input type="hidden" name="action" value="defaultAddress">
+                                <input type="hidden" name="id" value="${a.id}">
+                                <button class="button">Set as default</button>
+                            </form>
+                        </c:otherwise>
+                    </c:choose>
                     <form method="post" action="" novalidate>
                         <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                         <input type="hidden" name="action" value="saveAddress">
@@ -68,6 +82,7 @@
             <section class="panel">
                 <h3>Add address</h3>
                 <c:set var="fid" value="new" />
+                <c:set var="isNewForm" value="true" />
                 <c:set var="failed" value="${addressFormId == 'new'}" />
                 <c:set var="af" value="${failed ? addressForm : null}" />
                 <c:set var="fe" value="${failed ? fieldErrors : null}" />

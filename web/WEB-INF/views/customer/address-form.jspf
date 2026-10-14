@@ -1,4 +1,4 @@
-<%-- Address fields shared by the edit and add forms. Expects: af (values), fid ("new" or address id), fe (field errors of this form or empty). --%>
+<%-- Address fields shared by the edit and add forms. Expects: af (values), fid ("new" or address id), isNewForm, fe (field errors of this form or empty). --%>
 <c:set var="cityInList" value="false" />
 <c:forEach items="${serviceAreas}" var="sa"><c:if test="${sa == af.city}"><c:set var="cityInList" value="true" /></c:if></c:forEach>
 <c:set var="cityOther" value="${af.other_city or (not empty af.city and not cityInList)}" />
@@ -36,5 +36,8 @@
 </label>
 <small id="addr-${fid}-city-note" class="form-text text-muted">Delivery is available only to provinces/cities in this list.</small>
 <c:if test="${not empty fe.city}"><div id="addr-${fid}-city-error" class="invalid-feedback d-block"><c:out value="${fe.city}" /></div></c:if>
+<%-- Only a new address may be made default here; existing ones use "Set as default" (BA-04). --%>
+<c:if test="${isNewForm}">
 <label>
-    <input type="checkbox" name="primary" ${af.is_default ? 'checked' : ''}> Default</label>
+    <input type="checkbox" name="primary" ${af.is_default ? 'checked' : ''}> Set as default</label>
+</c:if>

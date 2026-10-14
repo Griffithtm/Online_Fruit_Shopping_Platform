@@ -39,9 +39,19 @@ public class AddressDAO {
                 uid, name, phone, line, ward, district, city, primary);
     }
 
-    public int update(Connection c, long id, long uid, String name, String phone, String line, String ward, String district, String city, boolean primary) throws SQLException {
-        return Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?",
-                name, phone, line, ward, district, city, primary, id, uid);
+    /** Updates the address fields only; the default flag changes only through setDefault (BA-04). */
+    public int update(Connection c, long id, long uid, String name, String phone, String line, String ward, String district, String city) throws SQLException {
+        return Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?",
+                name, phone, line, ward, district, city, id, uid);
+    }
+
+    public boolean isDefault(Connection c, long id, long uid) throws SQLException {
+        return Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=? AND is_default=1", id, uid) != null;
+    }
+
+    /** The user's default address, or null when the address book is empty. */
+    public Map<String, Object> findDefault(Connection c, long uid) throws SQLException {
+        return Database.one(c, "SELECT * FROM addresses WHERE user_id=? AND is_default=1", uid);
     }
 
     public int delete(Connection c, long id, long uid) throws SQLException {

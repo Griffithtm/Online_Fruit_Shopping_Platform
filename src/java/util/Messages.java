@@ -14,7 +14,9 @@ public final class Messages {
     public static final String MSG01 = "MSG01", MSG02 = "MSG02", MSG03 = "MSG03", MSG04 = "MSG04",
             MSG05 = "MSG05", MSG06 = "MSG06", MSG07 = "MSG07", MSG08 = "MSG08", MSG09 = "MSG09",
             MSG10 = "MSG10", MSG11 = "MSG11", MSG12 = "MSG12", MSG13 = "MSG13", MSG14 = "MSG14",
-            MSG15 = "MSG15", MSG16 = "MSG16", MSG17 = "MSG17", MSG18 = "MSG18", MSG19 = "MSG19";
+            MSG15 = "MSG15", MSG16 = "MSG16", MSG17 = "MSG17", MSG18 = "MSG18", MSG19 = "MSG19",
+            // MSG81–82: added by FE-01.2 (BA-04); to be added to SRS III.2.
+            MSG81 = "MSG81", MSG82 = "MSG82";
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{[a-z_]+\\}");
     private static final Map<String, String> TEXT = new HashMap<>();
@@ -100,6 +102,9 @@ public final class Messages {
         TEXT.put("MSG78", "Settlement remains Unsettled for seller order {seller_order_code}. Review the reconciliation exception.");
         TEXT.put("MSG79", "Adjustment {transaction_reference} has been recorded with its reason and audit history.");
         TEXT.put("MSG80", "Email notification {notification_reference} failed after the retry limit. The in-app notification remains available.");
+        // Not yet in SRS III.2 (to be added): address deletion feedback, FE-01.2 / BA-04.
+        TEXT.put("MSG81", "Address deleted successfully.");
+        TEXT.put("MSG82", "Address deleted. {address} is now your default delivery address.");
     }
 
     private Messages() {

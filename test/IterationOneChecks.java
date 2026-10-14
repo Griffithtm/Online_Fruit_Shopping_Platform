@@ -8,13 +8,15 @@ import java.util.concurrent.*;
 
 public class IterationOneChecks {
     static String tag="I1"+System.currentTimeMillis();
-    static long buyer,seller,other,courier,store,store2,listing,variant,category;
+    static long buyer,seller,other,courier,keeper,store,store2,listing,variant,category;
     static Connection open() throws Exception {return new DBConnect().getConnection();}
     static long number(Object o){return ((Number)o).longValue();}
     static void check(boolean ok,String name){if(!ok)throw new AssertionError(name);System.out.println("PASS "+name);}
     static void reject(Throwing action,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){System.out.println("PASS "+name);}}
     static void rejectWith(Throwing action,String message,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){if(!message.equals(expected.getMessage()))throw new AssertionError(name+": got \""+expected.getMessage()+"\"");System.out.println("PASS "+name);}}
     interface Throwing {void run()throws Exception;}
+    /** Id of the user's default address, or 0 when there is none. */
+    static long defaultOf(long uid)throws Exception {try(Connection c=open()){Map<String,Object> a=Database.one(c,"SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid);return a==null?0:number(a.get("id"));}}
     public static void main(String[] args)throws Exception {
       check(UnitPrice.perKg("500 g box",new BigDecimal("25000")).compareTo(new BigDecimal("50000"))==0,"normalize grams to VND/kg");
       check(UnitPrice.perKg("1.5 kg bag",new BigDecimal("60000")).compareTo(new BigDecimal("40000"))==0,"normalize decimal kg");
@@ -89,6 +91,29 @@ public class IterationOneChecks {
         rejectWith(()->as.address(seller,"saveAddress",""+pickup,"Seller","0900000002","Pickup 3","Ward","District","City",true),msg19,"pickup address of a READY seller order cannot be edited (MSG19)");
         try(Connection c=open()){courier=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'unused',?,'DELIVERY_STAFF')",tag+"d@test.invalid",tag);}
         rejectWith(()->as.address(courier,"saveAddress",null,"Courier","0900000003","Line","Ward","District","City",false),msg12,"delivery staff cannot add an address (MSG12)");
+        // BA-04: a separate customer with no open orders, so every address can be edited and deleted.
+        try(Connection c=open()){keeper=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'unused',?,'CUSTOMER')",tag+"k@test.invalid",tag);}
+        as.address(keeper,"saveAddress",null,"Alice","0900000010","A street","Ward","District","City",false);
+        long addrA=number(as.addresses(keeper).get(0).get("id"));
+        check(defaultOf(keeper)==addrA,"default: first address becomes default even unticked");
+        as.address(keeper,"saveAddress",null,"Bob","0900000011","B street","Ward","District","City",false);
+        long addrB=number(as.addresses(keeper).get(1).get("id"));
+        check(defaultOf(keeper)==addrA,"default: adding an unticked address keeps the default");
+        as.address(keeper,"saveAddress",""+addrA,"Alice","0900000010","A street","Ward","District","City",false);
+        check(defaultOf(keeper)==addrA,"default: editing the default address keeps it default");
+        as.address(keeper,"saveAddress",""+addrB,"Bob","0900000011","B street","Ward","District","City",true);
+        check(defaultOf(keeper)==addrA,"default: the checkbox is ignored when editing");
+        check(util.Messages.get(util.Messages.MSG18).equals(as.address(keeper,"defaultAddress",""+addrB,null,null,null,null,null,null,false)) && defaultOf(keeper)==addrB,"default: Set as default switches to the chosen address (MSG18)");
+        try(Connection c=open()){check(number(Database.one(c,"SELECT COUNT(*) n FROM addresses WHERE user_id=? AND is_default=1",keeper).get("n"))==1,"default: exactly one default address");}
+        rejectWith(()->as.address(keeper,"deleteAddress",null,null,null,null,null,null,null,false),msg12,"default: delete without id gives MSG12");
+        rejectWith(()->as.address(keeper,"defaultAddress","abc",null,null,null,null,null,null,false),msg12,"default: malformed id gives MSG12");
+        rejectWith(()->as.address(keeper,"defaultAddress",""+freeAddress,null,null,null,null,null,null,false),msg12,"default: another user's address gives MSG12");
+        as.address(keeper,"saveAddress",null,"Carol","0900000012","C street","Ward","District","City",false);
+        String moved=as.address(keeper,"deleteAddress",""+addrB,null,null,null,null,null,null,false);
+        check(defaultOf(keeper)==addrA && "Address deleted. Alice - A street, Ward, District, City is now your default delivery address.".equals(moved),"default: deleting the default makes the oldest remaining one default and says which (MSG82)");
+        long addrC=as.addresses(keeper).stream().mapToLong(a->number(a.get("id"))).filter(x->x!=addrA).findFirst().getAsLong();
+        check("Address deleted successfully.".equals(as.address(keeper,"deleteAddress",""+addrC,null,null,null,null,null,null,false)) && defaultOf(keeper)==addrA,"default: deleting a non-default address (MSG81)");
+        check("Address deleted successfully.".equals(as.address(keeper,"deleteAddress",""+addrA,null,null,null,null,null,null,false)) && as.addresses(keeper).isEmpty(),"default: deleting the last address leaves no default");
         CartService cart=new CartService();cart.change(buyer,"add",variant,2);
         check(cart.lines(buyer).size()==1 && number(cart.lines(buyer).get(0).get("quantity"))==2,"cart add and totals");
         reject(()->cart.change(buyer,"add",variant,2),"cart rejects quantity above stock");
@@ -126,8 +151,8 @@ public class IterationOneChecks {
         Database.update(c,"DELETE FROM variants WHERE listing_id IN (SELECT id FROM listings WHERE store_id IN (?,?))",store,store2);
         Database.update(c,"DELETE FROM listings WHERE store_id IN (?,?)",store,store2);
         Database.update(c,"DELETE FROM stores WHERE id IN (?,?)",store,store2);
-        Database.update(c,"DELETE FROM addresses WHERE user_id IN (?,?)",buyer,seller);
-        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?,?)",buyer,seller,other,courier);
+        Database.update(c,"DELETE FROM addresses WHERE user_id IN (?,?,?)",buyer,seller,keeper);
+        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?,?,?)",buyer,seller,other,courier,keeper);
         c.commit();
       }
     }
