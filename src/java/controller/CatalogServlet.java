@@ -1,5 +1,7 @@
 package controller;
 
+import model.*;
+
 import service.*;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -25,21 +27,21 @@ public class CatalogServlet extends BaseServlet {
             }
             if (p.equals("/product")) {
                 long id = Validation.id(r.getParameter("id"));
-                Map<String, Object> product = service.product(id);
+                ListingDetails product = service.product(id);
                 if (product == null) {
                     s.sendError(404);
                     return;
                 }
                 r.setAttribute("product", product);
                 r.setAttribute("variants", service.variants(id));
-                r.setAttribute("similar", service.products(null, product.get("category_id").toString(), null, null, null, null, "priceDesc", false));
+                r.setAttribute("similar", service.products(null, product.getCategoryId().toString(), null, null, null, null, "priceDesc", false));
                 view(r, s, "product");
                 return;
             }
             String store = r.getParameter("store");
             if (p.equals("/shop")) {
                 store = r.getParameter("id");
-                Map<String, Object> shop = service.shop(Validation.id(store));
+                Store shop = service.shop(Validation.id(store));
                 if (shop == null) {
                     s.sendError(404);
                     return;
