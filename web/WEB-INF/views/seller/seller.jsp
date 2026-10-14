@@ -86,7 +86,7 @@
                                 <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                                 <input type="hidden" name="action" value="submit">
                                 <input type="hidden" name="id" value="${l.id}">
-                                <button class="button">Submit for review</button>
+                                <button class="button">Submit to sell</button>
                             </form><a href="?editListing=${l.id}">Edit listing</a> · <a href="?images=${l.id}">Reorder images</a>
                         </td>
                     </tr>

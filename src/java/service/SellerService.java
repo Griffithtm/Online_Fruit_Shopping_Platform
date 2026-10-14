@@ -62,7 +62,7 @@ public class SellerService {
 
     public void submit(long uid, long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            if (Database.update(c, "UPDATE listings SET status='PENDING_REVIEW',rejection_reason=NULL,updated_at=SYSUTCDATETIME() WHERE id=? AND store_id=? AND status IN ('DRAFT','REJECTED') AND EXISTS(SELECT 1 FROM variants WHERE listing_id=listings.id AND status='ACTIVE')", id, store(c, uid)) != 1) {
+            if (Database.update(c, "UPDATE listings SET status='APPROVED',rejection_reason=NULL,updated_at=SYSUTCDATETIME() WHERE id=? AND store_id=? AND status IN ('DRAFT','REJECTED') AND EXISTS(SELECT 1 FROM variants WHERE listing_id=listings.id AND status='ACTIVE')", id, store(c, uid)) != 1) {
                 throw new IllegalArgumentException("At least one active variant is required. The listing must be Draft or Rejected.");
             }
         }
