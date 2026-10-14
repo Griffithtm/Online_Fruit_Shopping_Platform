@@ -39,7 +39,8 @@ public class StockReservationService {
                 if (((java.math.BigDecimal)product.get("price")).compareTo((java.math.BigDecimal)line.get("unit_price")) != 0) throw new IllegalArgumentException("A price has changed. Review and update your cart.");
                 int left = ((Number) line.get("quantity")).intValue();
                 boolean first = true;
-                List<Map<String, Object>> batches = Database.rows(c, "SELECT * FROM batches WITH(UPDLOCK,HOLDLOCK) WHERE variant_id=? AND status='AVAILABLE' AND expiry_date>CONVERT(date,SYSUTCDATETIME()) AND remaining_qty>reserved_qty ORDER BY expiry_date,id", line.get("variant_id"));
+                // BA-13, ThanhNC: a batch must still be fresh on the order's estimated delivery date (today when the order has none).
+                List<Map<String, Object>> batches = Database.rows(c, "SELECT * FROM batches WITH(UPDLOCK,HOLDLOCK) WHERE variant_id=? AND status='AVAILABLE' AND expiry_date>(SELECT COALESCE(CONVERT(date,o.estimated_delivery_at),CONVERT(date,SYSUTCDATETIME())) FROM seller_orders so JOIN orders o ON o.id=so.order_id WHERE so.id=?) AND remaining_qty>reserved_qty ORDER BY expiry_date,id", line.get("variant_id"), sellerOrderId);
                 for (Map<String, Object> b : batches) {
                     int take = Math.min(left, ((Number) b.get("remaining_qty")).intValue() - ((Number) b.get("reserved_qty")).intValue());
                     if (take <= 0) {

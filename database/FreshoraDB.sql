@@ -569,4 +569,10 @@ IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name=''ix_orders_delivery_address'
  CREATE INDEX ix_orders_delivery_address ON dbo.orders(delivery_address_id) WHERE delivery_address_id IS NOT NULL;
 ';
 
+-- FE-05.1 (BA-12): at most this percentage of the discounted item total may be paid with points.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''points_max_percent'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''points_max_percent'',''50'');
+';
+
 PRINT N'Freshora database installation/upgrade completed.';

@@ -4,6 +4,7 @@ public class IterationTwoChecks {
  interface Task{void run()throws Exception;}
  static void check(boolean ok,String msg){if(!ok)throw new AssertionError(msg);System.out.println("PASS "+(++count)+" "+msg);}
  static void reject(Task task,String msg)throws Exception{try{task.run();throw new AssertionError(msg);}catch(IllegalArgumentException expected){check(true,msg);}}
+ static void rejectWith(Task task,String expected,String msg)throws Exception{try{task.run();throw new AssertionError(msg);}catch(IllegalArgumentException e){if(!expected.equals(e.getMessage()))throw new AssertionError(msg+": got \""+e.getMessage()+"\"");check(true,msg);}}
  static long n(Object x){return ((Number)x).longValue();}
  static Connection db()throws Exception{return new DBConnect().getConnection();}
  static long user(Connection c,String suffix,String role)throws Exception{return Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'test-only',?,?)",tag+suffix+"@test.invalid",tag+suffix,role);}
@@ -39,6 +40,9 @@ public class IterationTwoChecks {
    cart.change(buyer,"add",variant,2);cart.change(buyer,"add",variant2,1);
    long oid=place("",0,"COD"),first=sid(oid,store),second=sid(oid,store2);
    check(n(one("SELECT delivery_address_id FROM orders WHERE id=?",oid).get("delivery_address_id"))==address,"placed order records the chosen delivery_address_id");
+   BigDecimal areaFee=(BigDecimal)one("SELECT TRY_CONVERT(decimal(15,2),JSON_VALUE(s.value,'$.delivery_fee')) fee FROM settings s JOIN addresses a ON a.city=s.name WHERE s.type='SERVICE_AREA' AND a.id=?",address).get("fee");
+   check(((BigDecimal)one("SELECT delivery_fee FROM seller_orders WHERE id=?",first).get("delivery_fee")).compareTo(areaFee)==0 && ((BigDecimal)one("SELECT delivery_fee FROM seller_orders WHERE id=?",second).get("delivery_fee")).compareTo(areaFee)==0,"BA-11 each seller order pays the area delivery fee");
+   check(((BigDecimal)one("SELECT delivery_fee FROM orders WHERE id=?",oid).get("delivery_fee")).compareTo(areaFee.multiply(new BigDecimal(2)))==0,"BA-11 order delivery fee is the sum of its seller orders");
    check(n(one("SELECT SUM(reserved_qty) n FROM batches WHERE variant_id IN (?,?)",variant,variant2).get("n"))==3,"all sellers reserved");
    reject(()->flow.change(seller,"SELLER",first,"reject","",null,false),"rejection requires reason");
    flow.change(other,"SELLER",second,"reject","Unable to fulfill",null,false);
@@ -59,10 +63,56 @@ public class IterationTwoChecks {
    cart.change(buyer,"add",variant,1);Map<String,Object> quote=checkout.quote(buyer,address,p.get("code"),0,"COD");check(((BigDecimal)quote.get("discount")).compareTo(new BigDecimal("10000"))==0,"voucher computes server-side discount");long discountOrder=place(p.get("code"),0,"COD");
    cart.change(buyer,"add",variant,1);reject(()->checkout.quote(buyer,address,p.get("code"),0,"COD"),"voucher per-customer limit enforced");
    flow.change(buyer,"CUSTOMER",sid(discountOrder,store),"cancel",null,null,false);check(((BigDecimal)one("SELECT budget_used FROM promotions WHERE id=?",promo).get("budget_used")).signum()==0,"full cancellation restores voucher budget");
+   // ---- Iteration 2.1: checkout quote (BA-09 … BA-18). The buyer's cart holds 1 x variant here. ----
+   long sellerAddress=n(one("SELECT id FROM addresses WHERE user_id=?",seller).get("id")),otherAddress=n(one("SELECT id FROM addresses WHERE user_id=?",other).get("id"));
+   rejectWith(()->checkout.quote(other,otherAddress),util.Messages.get(util.Messages.MSG35),"BA-17 empty cart gives MSG35");
+   cart.change(seller,"add",variant,1);
+   rejectWith(()->checkout.quote(seller,sellerAddress),util.Messages.get(util.Messages.MSG12),"BA-09 seller cannot check out own store products (MSG12)");
+   String city=(String)one("SELECT city FROM addresses WHERE id=?",address).get("city");long messy,unknown;
+   try(Connection c=db()){messy=Database.insert(c,"INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city) VALUES(?,'Test','0900000000','Test','Test','Test',?)",buyer,"  "+city.toUpperCase(Locale.ROOT).replace(" ","   ")+" ");
+     unknown=Database.insert(c,"INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city) VALUES(?,'Test','0900000000','Test','Test','Test',?)",buyer,"Nowhere "+tag);}
+   check(checkout.quote(buyer,messy)!=null,"BA-16 service area matches ignoring case and extra spaces");
+   rejectWith(()->checkout.quote(buyer,unknown),util.Messages.get(util.Messages.MSG36),"BA-16 unknown area gives MSG36");
+   update("INSERT transactions(type,user_id,points,remaining_points,status,points_expire_at,idempotency_key) VALUES('POINTS_EARN',?,30,30,'AVAILABLE',DATEADD(day,-1,CONVERT(date,SYSUTCDATETIME())),?)",buyer,tag+"-expired");
+   update("INSERT transactions(type,user_id,points,remaining_points,status,points_expire_at,idempotency_key) VALUES('POINTS_EARN',?,500,500,'AVAILABLE',DATEADD(day,365,CONVERT(date,SYSUTCDATETIME())),?)",buyer,tag+"-fresh");
+   update("UPDATE users SET points_balance=points_balance+530 WHERE id=?",buyer);
+   long expiresBefore=n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"));
+   Map<String,Object> pq=checkout.quote(buyer,address,"",0,"COD");
+   check(n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==530 && n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"))==expiresBefore && n(pq.get("usablePoints"))==500,"BA-10 quote reads usable points without writing");
+   Map<String,Object> pct=one("SELECT TRY_CONVERT(int,value) n FROM settings WHERE type='POLICY' AND name='points_max_percent' AND status='ACTIVE'");
+   long percent=pct==null || pct.get("n")==null?50:Math.min(100,n(pct.get("n"))),max1=Math.min(500,Math.min(100000*percent/100/1000,100));
+   check(n(pq.get("maxPoints"))==max1,"BA-12 maximum points follows points_max_percent");
+   rejectWith(()->checkout.quote(buyer,address,"",(int)max1+1,"COD"),util.Messages.get(util.Messages.MSG38,max1),"BA-12 too many points gives MSG38 with the maximum");
+   cart.change(buyer,"add",variant2,1);long max2=Math.min(500,Math.min(200000*percent/100/1000,200));
+   long pointsOrder=place("",(int)max2,"COD");
+   check(n(one("SELECT SUM(points_used) n FROM seller_orders WHERE order_id=?",pointsOrder).get("n"))==max2,"BA-12 maximum points split across two seller orders");
+   check(n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"))==expiresBefore+1 && n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==500-max2,"BA-10 placement (not the quote) expires old points");
+   String areaName=tag+" area";long etaAddress,variant3,shortBatch,longBatch;
+   try(Connection c=db()){Database.update(c,"INSERT settings(type,name,value) VALUES('SERVICE_AREA',?,?)",areaName,"{\"delivery_fee\":15000,\"eta_hours\":48}");
+     etaAddress=Database.insert(c,"INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city) VALUES(?,'Test','0900000000','Test','Test','Test',?)",buyer,areaName);
+     variant3=Database.insert(c,"INSERT variants(listing_id,option_name,unit,price) VALUES(?,'2 kg box','box',100000)",Database.one(c,"SELECT listing_id FROM variants WHERE id=?",variant).get("listing_id"));
+     shortBatch=Database.insert(c,"INSERT batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(?,?,'Test',CONVERT(date,SYSUTCDATETIME()),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,1,CONVERT(date,SYSUTCDATETIME())),'Test',10,10,50000)",variant3,tag+"short");
+     longBatch=Database.insert(c,"INSERT batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(?,?,'Test',CONVERT(date,SYSUTCDATETIME()),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,30,CONVERT(date,SYSUTCDATETIME())),'Test',5,5,50000)",variant3,tag+"long");}
+   cart.change(buyer,"add",variant3,6);
+   rejectWith(()->checkout.quote(buyer,etaAddress),util.Messages.get(util.Messages.MSG33,5,"box","2 kg box"),"BA-13 quote counts only batches fresh on the delivery date (MSG33)");
+   long line3=n(one("SELECT oi.id FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id JOIN orders o ON o.id=so.order_id WHERE o.customer_id=? AND o.status='CART' AND oi.variant_id=?",buyer,variant3).get("id"));
+   cart.change(buyer,"update",line3,2);
+   Map<String,Object> eq=checkout.quote(buyer,etaAddress);
+   check(n(eq.get("etaHours"))==48 && ((BigDecimal)eq.get("fee")).compareTo(new BigDecimal("15000"))==0,"BA-11 service area eta_hours and fee are used");
+   rejectWith(()->checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),"stale","",0,"COD"),util.Messages.get(util.Messages.MSG34),"BA-17 changed quote at placement gives MSG34");
+   long etaOrder=checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),(String)eq.get("fingerprint"),"",0,"COD");
+   check(n(one("SELECT COUNT(*) n FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE so.order_id=? AND oi.batch_id<>?",etaOrder,longBatch).get("n"))==0 && n(one("SELECT reserved_qty FROM batches WHERE id=?",shortBatch).get("reserved_qty"))==0,"BA-13 reservation skips batches expiring before delivery");
+   Map<String,Object> placed=one("SELECT order_code,payable_amount FROM orders WHERE id=?",etaOrder);
+   check(util.Messages.get(util.Messages.MSG39,placed.get("order_code"),new java.text.DecimalFormat("#,##0").format(placed.get("payable_amount"))+" VND").equals(checkout.placedNotice(buyer,etaOrder)),"BA-18 COD placement notice is MSG39");
+   long awaiting;try(Connection c=db()){awaiting=Database.insert(c,"INSERT orders(customer_id,order_code,status,recipient_name,recipient_phone,delivery_address,payment_method,placed_at,payment_expires_at) VALUES(?,?,'AWAITING_PAYMENT','Test','0900000000','Test address','CARD',SYSUTCDATETIME(),'2026-01-01T03:00:00')",buyer,tag+"P");}
+   check(util.Messages.get(util.Messages.MSG40,tag+"P","10:00 01/01/2026").equals(checkout.placedNotice(buyer,awaiting)),"BA-18 online notice is MSG40 with the deadline in Vietnam time");
+   check(checkout.placedNotice(seller,awaiting)==null,"BA-18 notice is not shown for another customer's order");
+   cart.change(buyer,"add",variant,1);
+   rejectWith(()->checkout.quote(buyer,address,"NOPE"+tag.replace("-",""),0,"COD"),util.Messages.get(util.Messages.MSG37,"it is invalid or outside its validity period"),"BA-17 unknown voucher gives MSG37");
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.
-   update("UPDATE listings SET status='HIDDEN' WHERE store_id IN (?,?)",store,store2);update("UPDATE users SET status='SUSPENDED' WHERE id IN (?,?,?,?,?)",buyer,seller,other,admin,courier);
+   update("UPDATE listings SET status='HIDDEN' WHERE store_id IN (?,?)",store,store2);update("UPDATE settings SET status='INACTIVE' WHERE type='SERVICE_AREA' AND name=?",tag+" area");update("UPDATE users SET status='SUSPENDED' WHERE id IN (?,?,?,?,?)",buyer,seller,other,admin,courier);
   }
  }
 }
