@@ -34,8 +34,14 @@ public class AddressDAO {
         return Database.one(c, "SELECT TOP 1 so.id FROM seller_orders so WITH(HOLDLOCK) JOIN stores s ON s.id=so.store_id WHERE s.owner_id=? AND s.pickup_address_id=? AND so.status IN ('READY','ASSIGNED','PICKED_UP','IN_TRANSIT','ARRIVING','FAILED')", uid, id) != null;
     }
 
-    public int insert(Connection c, long uid, String name, String phone, String line, String ward, String district, String city, boolean primary) throws SQLException {
-        return Database.update(c, "INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city,is_default) VALUES(?,?,?,?,?,?,?,?)",
+    /** The address row if it belongs to the user, otherwise null. */
+    public Map<String, Object> findById(Connection c, long id, long uid) throws SQLException {
+        return Database.one(c, "SELECT * FROM addresses WHERE id=? AND user_id=?", id, uid);
+    }
+
+    /** Inserts the address and returns its id. */
+    public long insert(Connection c, long uid, String name, String phone, String line, String ward, String district, String city, boolean primary) throws SQLException {
+        return Database.insert(c,"INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city,is_default) VALUES(?,?,?,?,?,?,?,?)",
                 uid, name, phone, line, ward, district, city, primary);
     }
 

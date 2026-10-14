@@ -5,38 +5,43 @@
             <section class="panel">
                 <h2>Personal information</h2>
                 <c:set var="pf" value="${empty profileForm ? profile : profileForm}" />
+                <c:set var="pe" value="${empty profileForm ? null : fieldErrors}" />
                 <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="profile">
                     <label>Full name
-                        <input class="form-control ${not empty fieldErrors.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(pf.full_name)}" required aria-describedby="profile-name-error" ${not empty fieldErrors.name ? 'aria-invalid="true"' : ''}>
+                        <input class="form-control ${not empty pe.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(pf.full_name)}" required aria-describedby="profile-name-error" ${not empty pe.name ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <c:if test="${not empty fieldErrors.name}"><div id="profile-name-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.name}" /></div></c:if>
+                    <c:if test="${not empty pe.name}"><div id="profile-name-error" class="invalid-feedback d-block"><c:out value="${pe.name}" /></div></c:if>
                     <label>Email
-                        <input class="form-control ${not empty fieldErrors.email ? 'is-invalid' : ''}" name="email" type="email" maxlength="254" value="${fn:escapeXml(pf.email)}" required aria-describedby="profile-email-error" ${not empty fieldErrors.email ? 'aria-invalid="true"' : ''}>
+                        <input class="form-control ${not empty pe.email ? 'is-invalid' : ''}" name="email" type="email" maxlength="254" value="${fn:escapeXml(pf.email)}" required aria-describedby="profile-email-error" ${not empty pe.email ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <c:if test="${not empty fieldErrors.email}"><div id="profile-email-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.email}" /></div></c:if>
+                    <c:if test="${not empty pe.email}"><div id="profile-email-error" class="invalid-feedback d-block"><c:out value="${pe.email}" /></div></c:if>
                     <label>Phone (optional)
-                        <input class="form-control ${not empty fieldErrors.phone ? 'is-invalid' : ''}" name="phone" type="tel" maxlength="20" value="${fn:escapeXml(pf.phone)}" aria-describedby="profile-phone-error" ${not empty fieldErrors.phone ? 'aria-invalid="true"' : ''}>
+                        <input class="form-control ${not empty pe.phone ? 'is-invalid' : ''}" name="phone" type="tel" maxlength="20" value="${fn:escapeXml(pf.phone)}" aria-describedby="profile-phone-error" ${not empty pe.phone ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <c:if test="${not empty fieldErrors.phone}"><div id="profile-phone-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.phone}" /></div></c:if>
+                    <c:if test="${not empty pe.phone}"><div id="profile-phone-error" class="invalid-feedback d-block"><c:out value="${pe.phone}" /></div></c:if>
                     <button class="button">Save profile</button>
                 </form>
             </section>
             <section class="panel">
                 <h2>Change password</h2>
-                <form method="post" action="">
+                <c:set var="we" value="${passwordFailed ? fieldErrors : null}" />
+                <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="password">
                     <label>Current password
-                        <input class="form-control" name="old" type="password" value="" required>
+                        <input class="form-control ${not empty we.old ? 'is-invalid' : ''}" name="old" type="password" value="" required autocomplete="current-password" aria-describedby="password-old-error" ${not empty we.old ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty we.old}"><div id="password-old-error" class="invalid-feedback d-block"><c:out value="${we.old}" /></div></c:if>
                     <label>New password
-                        <input class="form-control" name="password" type="password" value="" required>
+                        <input class="form-control ${not empty we.password ? 'is-invalid' : ''}" name="password" type="password" maxlength="64" value="" required autocomplete="new-password" aria-describedby="password-new-error" ${not empty we.password ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty we.password}"><div id="password-new-error" class="invalid-feedback d-block"><c:out value="${we.password}" /></div></c:if>
                     <label>Confirm
-                        <input class="form-control" name="confirm" type="password" value="" required>
+                        <input class="form-control ${not empty we.confirm ? 'is-invalid' : ''}" name="confirm" type="password" value="" required autocomplete="new-password" aria-describedby="password-confirm-error" ${not empty we.confirm ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty we.confirm}"><div id="password-confirm-error" class="invalid-feedback d-block"><c:out value="${we.confirm}" /></div></c:if>
                     <button class="button">Change password</button>
                 </form>
             </section>

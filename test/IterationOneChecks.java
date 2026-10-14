@@ -8,13 +8,17 @@ import java.util.concurrent.*;
 
 public class IterationOneChecks {
     static String tag="I1"+System.currentTimeMillis();
-    static long buyer,seller,other,courier,keeper,store,store2,listing,variant,category;
+    static long buyer,seller,other,courier,keeper,pwUser,store,store2,listing,variant,category;
     static Connection open() throws Exception {return new DBConnect().getConnection();}
     static long number(Object o){return ((Number)o).longValue();}
     static void check(boolean ok,String name){if(!ok)throw new AssertionError(name);System.out.println("PASS "+name);}
     static void reject(Throwing action,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){System.out.println("PASS "+name);}}
     static void rejectWith(Throwing action,String message,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){if(!message.equals(expected.getMessage()))throw new AssertionError(name+": got \""+expected.getMessage()+"\"");System.out.println("PASS "+name);}}
     interface Throwing {void run()throws Exception;}
+    static long auditCount(long uid)throws Exception {try(Connection c=open()){return number(Database.one(c,"SELECT COUNT(*) n FROM audit_logs WHERE actor_id=?",uid).get("n"));}}
+    /** Runs the action and checks it wrote exactly one audit row with the expected action. */
+    static void audited(long uid,Throwing action,String expected,String name)throws Exception {long before=auditCount(uid);action.run();
+      try(Connection c=open()){check(auditCount(uid)==before+1 && expected.equals(Database.one(c,"SELECT TOP 1 action FROM audit_logs WHERE actor_id=? ORDER BY id DESC",uid).get("action")),name);}}
     /** Id of the user's default address, or 0 when there is none. */
     static long defaultOf(long uid)throws Exception {try(Connection c=open()){Map<String,Object> a=Database.one(c,"SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid);return a==null?0:number(a.get("id"));}}
     public static void main(String[] args)throws Exception {
@@ -114,6 +118,32 @@ public class IterationOneChecks {
         long addrC=as.addresses(keeper).stream().mapToLong(a->number(a.get("id"))).filter(x->x!=addrA).findFirst().getAsLong();
         check("Address deleted successfully.".equals(as.address(keeper,"deleteAddress",""+addrC,null,null,null,null,null,null,false)) && defaultOf(keeper)==addrA,"default: deleting a non-default address (MSG81)");
         check("Address deleted successfully.".equals(as.address(keeper,"deleteAddress",""+addrA,null,null,null,null,null,null,false)) && as.addresses(keeper).isEmpty(),"default: deleting the last address leaves no default");
+        // BA-06: password change. A user with a real BCrypt hash so login can be checked.
+        String pwEmail=(tag+"p@test.invalid").toLowerCase(Locale.ROOT),oldPw="OldPass123!",newPw="NewPass456!";
+        try(Connection c=open()){pwUser=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,?,?,'CUSTOMER')",pwEmail,org.mindrot.jbcrypt.BCrypt.hashpw(oldPw,org.mindrot.jbcrypt.BCrypt.gensalt(4)),tag);}
+        rejectWith(()->as.password(pwUser,"WrongPass1!",newPw,newPw),"Enter a valid current password.","password: wrong current password gives MSG04");
+        rejectWith(()->as.password(pwUser,oldPw,"Short1!","Short1!"),"Enter a valid new password (8–64 characters).","password: 7-character new password gives MSG04");
+        rejectWith(()->as.password(pwUser,oldPw,"x".repeat(65),"x".repeat(65)),"New password must not exceed 64 characters.","password: 65-character new password gives MSG03");
+        rejectWith(()->as.password(pwUser,oldPw,oldPw,oldPw),"Enter a valid new password. It must be different from the current password.","password: new password equal to current is rejected");
+        try{as.password(pwUser,oldPw,newPw,newPw+"x");throw new AssertionError("password: confirmation mismatch");}
+        catch(util.FieldErrors fe){check(util.Messages.get(util.Messages.MSG16).equals(fe.getErrors().get("confirm")),"password: confirmation mismatch gives MSG16 under the confirm field");}
+        check(auditCount(pwUser)==0,"audit: failed password attempts write nothing");
+        audited(pwUser,()->as.password(pwUser,oldPw,newPw,newPw),"PASSWORD_CHANGED","audit: password change writes one row");
+        try(Connection c=open()){Map<String,Object> row=Database.one(c,"SELECT TOP 1 old_value,new_value,note FROM audit_logs WHERE actor_id=? ORDER BY id DESC",pwUser);
+          check(row.get("old_value")==null && row.get("new_value")==null && row.get("note")==null,"audit: password row holds no password or hash");}
+        check(as.login(pwEmail,newPw).getId()==pwUser,"password: new password signs in");
+        reject(()->as.login(pwEmail,oldPw),"password: old password no longer signs in");
+        audited(pwUser,()->as.profile(pwUser,"Renamed",pwEmail,"0911111111"),"PROFILE_UPDATED","audit: profile change writes one row");
+        try(Connection c=open()){Map<String,Object> row=Database.one(c,"SELECT TOP 1 old_value,new_value FROM audit_logs WHERE actor_id=? ORDER BY id DESC",pwUser);
+          check(((String)row.get("old_value")).contains("\"full_name\":\""+tag+"\"") && ((String)row.get("new_value")).contains("\"phone\":\"0911111111\""),"audit: profile row has old and new values");}
+        audited(pwUser,()->as.address(pwUser,"saveAddress",null,"P1","0900000020","P street","Ward","District","City",false),"ADDRESS_CREATED","audit: address create writes one row");
+        long pw1=number(as.addresses(pwUser).get(0).get("id"));
+        audited(pwUser,()->as.address(pwUser,"saveAddress",""+pw1,"P1","0900000020","P street 2","Ward","District","City",false),"ADDRESS_UPDATED","audit: address update writes one row");
+        as.address(pwUser,"saveAddress",null,"P2","0900000021","Q street","Ward","District","City",false);
+        long pw2=as.addresses(pwUser).stream().mapToLong(a->number(a.get("id"))).filter(x->x!=pw1).findFirst().getAsLong();
+        audited(pwUser,()->as.address(pwUser,"defaultAddress",""+pw2,null,null,null,null,null,null,false),"ADDRESS_DEFAULT_SET","audit: set default writes one row");
+        audited(pwUser,()->as.address(pwUser,"deleteAddress",""+pw2,null,null,null,null,null,null,false),"ADDRESS_DELETED","audit: deleting the default writes one row (default move in note)");
+        try(Connection c=open()){check(("Default moved to address #"+pw1).equals(Database.one(c,"SELECT TOP 1 note FROM audit_logs WHERE actor_id=? ORDER BY id DESC",pwUser).get("note")),"audit: delete note names the new default");}
         CartService cart=new CartService();cart.change(buyer,"add",variant,2);
         check(cart.lines(buyer).size()==1 && number(cart.lines(buyer).get(0).get("quantity"))==2,"cart add and totals");
         reject(()->cart.change(buyer,"add",variant,2),"cart rejects quantity above stock");
@@ -151,8 +181,10 @@ public class IterationOneChecks {
         Database.update(c,"DELETE FROM variants WHERE listing_id IN (SELECT id FROM listings WHERE store_id IN (?,?))",store,store2);
         Database.update(c,"DELETE FROM listings WHERE store_id IN (?,?)",store,store2);
         Database.update(c,"DELETE FROM stores WHERE id IN (?,?)",store,store2);
-        Database.update(c,"DELETE FROM addresses WHERE user_id IN (?,?,?)",buyer,seller,keeper);
-        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?,?,?)",buyer,seller,other,courier,keeper);
+        Database.update(c,"DELETE FROM addresses WHERE user_id IN (?,?,?,?)",buyer,seller,keeper,pwUser);
+        // audit_logs is append-only and references its actor: users with audit rows are kept, suspended.
+        Database.update(c,"UPDATE users SET status='SUSPENDED' WHERE id IN (?,?,?,?,?,?) AND EXISTS(SELECT 1 FROM audit_logs a WHERE a.actor_id=users.id)",buyer,seller,other,courier,keeper,pwUser);
+        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?,?,?,?) AND NOT EXISTS(SELECT 1 FROM audit_logs a WHERE a.actor_id=users.id)",buyer,seller,other,courier,keeper,pwUser);
         c.commit();
       }
     }

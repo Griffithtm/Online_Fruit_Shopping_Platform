@@ -57,8 +57,10 @@ public class AccountServlet extends BaseServlet {
                 return;
             } else if ("password".equals(a)) {
                 service.password(uid(r), r.getParameter("old"), r.getParameter("password"), r.getParameter("confirm"));
+                // Sign out as before, then carry MSG17 to the login page in a fresh session (header.jsp shows it once).
                 r.getSession().invalidate();
-                redirect(r,s,"/login?success=1");
+                r.getSession(true).setAttribute("flash", Messages.get(Messages.MSG17));
+                redirect(r, s, "/login");
                 return;
             } else if (java.util.Set.of("saveAddress", "deleteAddress", "defaultAddress").contains(a)) {
                 String message = service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), city(r), "on".equals(r.getParameter("primary")));
@@ -75,6 +77,9 @@ public class AccountServlet extends BaseServlet {
                 form.put("email", r.getParameter("email"));
                 form.put("phone", r.getParameter("phone"));
                 r.setAttribute("profileForm", form);
+            } else if ("password".equals(r.getParameter("action"))) {
+                // Passwords are never sent back to the page; only the errors are shown.
+                r.setAttribute("passwordFailed", true);
             } else if ("saveAddress".equals(r.getParameter("action"))) {
                 // Keys match the address row used by the JSP; addressFormId tells which address form failed.
                 Map<String, Object> form = new HashMap<>();

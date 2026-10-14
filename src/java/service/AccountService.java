@@ -2,6 +2,7 @@ package service;
 
 import config.DBConnect;
 import dao.AddressDAO;
+import dao.AuditDAO;
 import dao.Database;
 import dao.SettingDAO;
 import dao.UserDAO;
@@ -19,6 +20,7 @@ public class AccountService {
 
     private final UserDAO users = new UserDAO();
     private final AddressDAO addressDao = new AddressDAO();
+    private final AuditDAO audit = new AuditDAO();
 
     private static boolean matches(String plain, String hash) {
         return plain != null && hash != null && BCrypt.checkpw(plain, hash.replaceFirst("^\\$2[by]\\$", "\\$2a\\$"));
@@ -80,7 +82,9 @@ public class AccountService {
                 if (users.emailTakenByOther(c, e, id)) {
                     throw FieldErrors.of("email", Messages.get(Messages.MSG13));
                 }
+                Map<String, Object> before = users.findProfile(c, id);
                 users.updateProfile(c, id, n, e, p);
+                audit.log(c, id, "User", id, "PROFILE_UPDATED", profileJson(before.get("full_name"), before.get("email"), before.get("phone")), profileJson(n, e, p), null);
                 c.commit();
                 return n;
             } catch (SQLException ex) {
@@ -97,16 +101,56 @@ public class AccountService {
         }
     }
 
+    private static String profileJson(Object name, Object email, Object phone) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("full_name", name);
+        m.put("email", email);
+        m.put("phone", phone);
+        return AuditDAO.json(m);
+    }
+
+    private static String addressJson(Map<String, Object> a) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        for (String k : new String[]{"recipient_name", "phone", "address_line", "ward", "district", "city", "is_default"}) {
+            m.put(k, a.get(k));
+        }
+        return AuditDAO.json(m);
+    }
+
+    /**
+     * Changes the password after checking the current one (FE-01.2, BA-06). Passwords are never trimmed.
+     * Errors are reported per field: old, password, confirm. Validation.password is shared and left unchanged.
+     */
     public void password(long id, String old, String pass, String confirm) throws Exception {
-        Validation.password(pass, confirm);
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (old == null || old.isEmpty()) {
+            errors.put("old", Messages.get(Messages.MSG02, "current password"));
+        }
+        if (pass == null || pass.isEmpty()) {
+            errors.put("password", Messages.get(Messages.MSG02, "new password"));
+        } else if (pass.length() > 64) {
+            errors.put("password", Messages.get(Messages.MSG03, "new password", 64));
+        } else if (pass.length() < 8 || pass.getBytes(StandardCharsets.UTF_8).length > 72) {
+            errors.put("password", Messages.get(Messages.MSG04, "new password (8–64 characters)"));
+        }
+        if (!Objects.equals(pass, confirm)) {
+            errors.put("confirm", Messages.get(Messages.MSG16));
+        }
+        FieldErrors.throwIfAny(errors);
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                if (!matches(old, users.lockPasswordHash(c, id))) {
-                    throw Messages.error(Messages.MSG04, "current password");
+                String hash = users.lockPasswordHash(c, id);
+                if (!matches(old, hash)) {
+                    throw FieldErrors.of("old", Messages.get(Messages.MSG04, "current password"));
+                }
+                if (matches(pass, hash)) {
+                    throw FieldErrors.of("password", Messages.get(Messages.MSG04, "new password") + " It must be different from the current password.");
                 }
                 users.updatePasswordHash(c, id, BCrypt.hashpw(pass, BCrypt.gensalt(12)));
                 users.invalidateResetTokens(c, id);
+                // Never log the password or its hash.
+                audit.log(c, id, "User", id, "PASSWORD_CHANGED", null, null, null);
                 c.commit();
             } catch (Exception ex) {
                 c.rollback();
@@ -165,10 +209,12 @@ public class AccountService {
                     }
                 }
                 String message;
+                Map<String, Object> before = aid == null ? null : addressDao.findById(c, aid, uid);
                 if (delete) {
-                    boolean wasDefault = addressDao.isDefault(c, aid, uid);
+                    boolean wasDefault = Boolean.TRUE.equals(before.get("is_default"));
                     addressDao.delete(c, aid, uid);
                     message = Messages.get(Messages.MSG81);
+                    String note = null;
                     if (wasDefault) {
                         // The oldest remaining address takes over, and the user is told which one.
                         addressDao.makeFirstDefault(c, uid);
@@ -176,11 +222,15 @@ public class AccountService {
                         if (next != null) {
                             message = Messages.get(Messages.MSG82, next.get("recipient_name") + " - " + next.get("address_line") + ", "
                                     + next.get("ward") + ", " + next.get("district") + ", " + next.get("city"));
+                            note = "Default moved to address #" + next.get("id");
                         }
                     }
+                    audit.log(c, uid, "Address", aid, "ADDRESS_DELETED", addressJson(before), null, note);
                 } else if (action.equals("defaultAddress")) {
+                    Map<String, Object> previous = addressDao.findDefault(c, uid);
                     addressDao.clearDefault(c, uid);
                     addressDao.setDefault(c, aid, uid);
+                    audit.log(c, uid, "Address", aid, "ADDRESS_DEFAULT_SET", previous == null ? null : previous.get("id").toString(), aid.toString(), null);
                     message = Messages.get(Messages.MSG18);
                 } else {
                     Map<String, String> errors = new LinkedHashMap<>();
@@ -198,9 +248,11 @@ public class AccountService {
                         if (makeDefault) {
                             addressDao.clearDefault(c, uid);
                         }
-                        addressDao.insert(c, uid, name, phone, line, ward, district, city, makeDefault);
+                        long newId = addressDao.insert(c, uid, name, phone, line, ward, district, city, makeDefault);
+                        audit.log(c, uid, "Address", newId, "ADDRESS_CREATED", null, addressJson(addressDao.findById(c, newId, uid)), null);
                     } else {
                         addressDao.update(c, aid, uid, name, phone, line, ward, district, city);
+                        audit.log(c, uid, "Address", aid, "ADDRESS_UPDATED", addressJson(before), addressJson(addressDao.findById(c, aid, uid)), null);
                     }
                     message = Messages.get(Messages.MSG05, "Address");
                 }

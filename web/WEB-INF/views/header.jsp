@@ -122,6 +122,14 @@
                                     <c:out value="${message}" />
                                 </div>
                             </c:if>
+                            <%-- One-time message left in the session before a redirect (e.g. MSG17 after a password change);
+                                 servlets that move it to "message" themselves remove it first, so it never shows twice. --%>
+                            <c:if test="${not empty sessionScope.flash}">
+                                <div class="alert alert-info">
+                                    <c:out value="${sessionScope.flash}" />
+                                </div>
+                                <c:remove var="flash" scope="session" />
+                            </c:if>
                             <c:if test="${param.saved == '1' || param.success == '1'}">
                                 <div class="alert alert-success">Changes saved successfully.</div>
                             </c:if>
