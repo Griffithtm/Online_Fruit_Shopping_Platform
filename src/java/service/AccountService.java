@@ -1,9 +1,13 @@
 package service;
 
 import config.DBConnect;
+import dao.AddressDAO;
 import dao.Database;
+import dao.UserDAO;
 import model.SessionUser;
 import org.mindrot.jbcrypt.BCrypt;
+import util.FieldErrors;
+import util.Messages;
 import java.sql.*;
 import java.util.*;
 import java.nio.file.*;
@@ -11,6 +15,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 
 public class AccountService {
+
+    private final UserDAO users = new UserDAO();
+    private final AddressDAO addressDao = new AddressDAO();
 
     private static boolean matches(String plain, String hash) {
         return plain != null && hash != null && BCrypt.checkpw(plain, hash.replaceFirst("^\\$2[by]\\$", "\\$2a\\$"));
@@ -48,19 +55,44 @@ public class AccountService {
 
     public Map<String, Object> profile(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.one(c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
+            return users.findProfile(c, id);
         }
     }
 
     public List<Map<String, Object>> addresses(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.rows(c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", id);
+            return addressDao.findByUser(c, id);
         }
     }
 
-    public void profile(long id, String name, String phone) throws Exception {
+    /** Updates name, email and phone of the current user; returns the saved name. Errors are reported per field. */
+    public String profile(long id, String name, String email, String phone) throws Exception {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String n = FieldErrors.check(errors, "name", () -> Validation.field(name, 100, "full name", true));
+        String e = FieldErrors.check(errors, "email", () -> Validation.email(email));
+        String p = FieldErrors.check(errors, "phone", () -> Validation.phone(phone, false));
+        FieldErrors.throwIfAny(errors);
         try (Connection c = new DBConnect().getConnection()) {
-            Database.update(c, "UPDATE users SET full_name=?,phone=?,updated_at=SYSUTCDATETIME() WHERE id=?", Validation.text(name, 100), Validation.text(phone, 20), id);
+            c.setAutoCommit(false);
+            try {
+                users.lockUser(c, id);
+                if (users.emailTakenByOther(c, e, id)) {
+                    throw FieldErrors.of("email", Messages.get(Messages.MSG13));
+                }
+                users.updateProfile(c, id, n, e, p);
+                c.commit();
+                return n;
+            } catch (SQLException ex) {
+                c.rollback();
+                // 2627/2601: unique key violation; email is the only unique column this UPDATE writes.
+                if (ex.getErrorCode() == 2627 || ex.getErrorCode() == 2601) {
+                    throw FieldErrors.of("email", Messages.get(Messages.MSG13));
+                }
+                throw ex;
+            } catch (Exception ex) {
+                c.rollback();
+                throw ex;
+            }
         }
     }
 
@@ -69,14 +101,28 @@ public class AccountService {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-            Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
-            if (!matches(old, (String) u.get("password_hash"))) {
-                throw new IllegalArgumentException("The current password is incorrect.");
+                if (!matches(old, users.lockPasswordHash(c, id))) {
+                    throw Messages.error(Messages.MSG04, "current password");
+                }
+                users.updatePasswordHash(c, id, BCrypt.hashpw(pass, BCrypt.gensalt(12)));
+                users.invalidateResetTokens(c, id);
+                c.commit();
+            } catch (Exception ex) {
+                c.rollback();
+                throw ex;
             }
-            Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), id);
-            Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", id);
-            c.commit();
-            } catch(Exception ex) {c.rollback();throw ex;}
+        }
+    }
+
+    /** Parses an address id; a malformed id is reported like a foreign one (MSG12). */
+    private static Long addressId(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        try {
+            return Validation.id(id);
+        } catch (IllegalArgumentException e) {
+            throw Messages.error(Messages.MSG12);
         }
     }
 
@@ -84,19 +130,19 @@ public class AccountService {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Database.one(c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
-                Long aid = (id == null || id.isBlank()) ? null : Validation.id(id);
-                if (aid != null && Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=?", aid, uid) == null) {
-                    throw new IllegalArgumentException("Address not found.");
+                users.lockUser(c, uid);
+                Long aid = addressId(id);
+                if (aid != null && !addressDao.existsForUser(c, aid, uid)) {
+                    throw Messages.error(Messages.MSG12);
                 }
-                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && Database.one(c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED')", uid) != null) {
-                    throw new IllegalArgumentException("You cannot edit or delete an address while orders are being processed.");
+                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && addressDao.hasOpenOrder(c, uid)) {
+                    throw Messages.error(Messages.MSG19);
                 }
                 if (action.equals("deleteAddress")) {
-                    Database.update(c, "DELETE FROM addresses WHERE id=? AND user_id=?", aid, uid);
+                    addressDao.delete(c, aid, uid);
                 } else if (action.equals("defaultAddress")) {
-                    Database.update(c, "UPDATE addresses SET is_default=0 WHERE user_id=?", uid);
-                    Database.update(c, "UPDATE addresses SET is_default=1 WHERE id=? AND user_id=?", aid, uid);
+                    addressDao.clearDefault(c, uid);
+                    addressDao.setDefault(c, aid, uid);
                 } else {
                     name = Validation.text(name, 100);
                     phone = Validation.text(phone, 20);
@@ -105,16 +151,16 @@ public class AccountService {
                     district = Validation.text(district, 100);
                     city = Validation.text(city, 100);
                     if (primary) {
-                        Database.update(c, "UPDATE addresses SET is_default=0 WHERE user_id=?", uid);
+                        addressDao.clearDefault(c, uid);
                     }
                     if (aid == null) {
-                        Database.update(c, "INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city,is_default) VALUES(?,?,?,?,?,?,?,?)", uid, name, phone, line, ward, district, city, primary);
+                        addressDao.insert(c, uid, name, phone, line, ward, district, city, primary);
                     } else {
-                        Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?", name, phone, line, ward, district, city, primary, aid, uid);
+                        addressDao.update(c, aid, uid, name, phone, line, ward, district, city, primary);
                     }
                 }
-                if (Database.one(c,"SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid)==null) {
-                    Database.update(c,"UPDATE addresses SET is_default=1 WHERE id=(SELECT MIN(id) FROM addresses WHERE user_id=?)",uid);
+                if (!addressDao.hasDefault(c, uid)) {
+                    addressDao.makeFirstDefault(c, uid);
                 }
                 c.commit();
             } catch (Exception e) {

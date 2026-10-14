@@ -5,6 +5,11 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 import jakarta.servlet.*;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import model.SessionUser;
+import util.FieldErrors;
+import util.Messages;
 
 @WebServlet("/account")
 public class AccountServlet extends BaseServlet {
@@ -13,6 +18,11 @@ public class AccountServlet extends BaseServlet {
 
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
+            Object flash = r.getSession().getAttribute("flash");
+            if (flash != null) {
+                r.getSession().removeAttribute("flash");
+                r.setAttribute("message", flash);
+            }
             r.setAttribute("profile", service.profile(uid(r)));
             r.setAttribute("addresses", service.addresses(uid(r)));
             view(r, s, "account");
@@ -25,7 +35,12 @@ public class AccountServlet extends BaseServlet {
         try {
             String a = r.getParameter("action");
             if ("profile".equals(a)) {
-                service.profile(uid(r), r.getParameter("name"), r.getParameter("phone"));
+                String name = service.profile(uid(r), r.getParameter("name"), r.getParameter("email"), r.getParameter("phone"));
+                HttpSession session = r.getSession();
+                session.setAttribute("user", ((SessionUser) session.getAttribute("user")).withName(name));
+                session.setAttribute("flash", Messages.get(Messages.MSG05, "Profile"));
+                redirect(r, s, "/account");
+                return;
             } else if ("password".equals(a)) {
                 service.password(uid(r), r.getParameter("old"), r.getParameter("password"), r.getParameter("confirm"));
                 r.getSession().invalidate();
@@ -38,6 +53,17 @@ public class AccountServlet extends BaseServlet {
             }
             redirect(r, s, "/account?saved=1");
         } catch (Exception e) {
+            if ("profile".equals(r.getParameter("action"))) {
+                // Keep what the user typed (NFR-UX-01); keys match the profile row used by the JSP.
+                Map<String, String> form = new HashMap<>();
+                form.put("full_name", r.getParameter("name"));
+                form.put("email", r.getParameter("email"));
+                form.put("phone", r.getParameter("phone"));
+                r.setAttribute("profileForm", form);
+            }
+            if (e instanceof FieldErrors fe) {
+                r.setAttribute("fieldErrors", fe.getErrors());
+            }
             r.setAttribute("error", error(e));
             doGet(r, s);
         }

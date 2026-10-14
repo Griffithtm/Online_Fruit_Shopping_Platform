@@ -13,6 +13,7 @@ public class IterationOneChecks {
     static long number(Object o){return ((Number)o).longValue();}
     static void check(boolean ok,String name){if(!ok)throw new AssertionError(name);System.out.println("PASS "+name);}
     static void reject(Throwing action,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){System.out.println("PASS "+name);}}
+    static void rejectWith(Throwing action,String message,String name)throws Exception {try{action.run();throw new AssertionError(name);}catch(IllegalArgumentException expected){if(!message.equals(expected.getMessage()))throw new AssertionError(name+": got \""+expected.getMessage()+"\"");System.out.println("PASS "+name);}}
     interface Throwing {void run()throws Exception;}
     public static void main(String[] args)throws Exception {
       check(UnitPrice.perKg("500 g box",new BigDecimal("25000")).compareTo(new BigDecimal("50000"))==0,"normalize grams to VND/kg");
@@ -44,6 +45,25 @@ public class IterationOneChecks {
         check(ss.suggestions(seller,tag).isEmpty(),"suggestions exclude own store");
         check(ss.suggestions(other,tag).size()==1,"other seller receives matching suggestion");
         reject(()->cs.products(tag,null,null,"100","10",null,"new",false,"all"),"invalid price interval rejected");
+        String buyerEmail=(tag+"b@test.invalid").toLowerCase(Locale.ROOT);
+        Map<String,Object> before=null;
+        try(Connection c=open()){before=Database.one(c,"SELECT role,points_balance FROM users WHERE id=?",buyer);}
+        as.profile(buyer,tag,buyerEmail.toUpperCase(Locale.ROOT),"0912 345.678");
+        Map<String,Object> saved=as.profile(buyer);
+        check(buyerEmail.equals(saved.get("email")),"profile: own email in upper case is saved lower case, not MSG13");
+        check("0912345678".equals(saved.get("phone")),"profile: phone spaces/dots removed before saving");
+        rejectWith(()->as.profile(buyer,tag,(tag+"o@test.invalid").toUpperCase(Locale.ROOT),null),util.Messages.get(util.Messages.MSG13),"profile: another user's email in different case gives MSG13");
+        rejectWith(()->as.profile(buyer,tag,buyerEmail,"abc"),"Enter a valid phone number.","profile: phone letters give MSG04");
+        rejectWith(()->as.profile(buyer,tag,buyerEmail,"123"),"Enter a valid phone number.","profile: phone shorter than 7 digits gives MSG04");
+        rejectWith(()->as.profile(buyer," ",buyerEmail,null),"Full name is required.","profile: blank name gives MSG02");
+        rejectWith(()->as.profile(buyer,"x".repeat(101),buyerEmail,null),"Full name must not exceed 100 characters.","profile: 101-character name gives MSG03");
+        rejectWith(()->as.profile(buyer,tag,"not-an-email",null),"Enter a valid email address.","profile: malformed email gives MSG04");
+        as.profile(buyer,tag,buyerEmail,"  ");
+        check(as.profile(buyer).get("phone")==null,"profile: blank phone is stored as NULL");
+        // The service API has no role/points input; the servlet only reads name, email and phone,
+        // so role=ADMIN / points_balance=9999 in the form cannot reach the UPDATE.
+        try(Connection c=open()){Map<String,Object> after=Database.one(c,"SELECT role,points_balance FROM users WHERE id=?",buyer);
+          check(before.equals(after) && "CUSTOMER".equals(after.get("role")),"profile: role and points unchanged by profile saves");}
         as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","City",false);
         check(Boolean.TRUE.equals(as.addresses(buyer).get(0).get("is_default")),"first address automatically default");
         CartService cart=new CartService();cart.change(buyer,"add",variant,2);

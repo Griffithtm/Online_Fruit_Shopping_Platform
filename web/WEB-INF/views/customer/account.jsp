@@ -4,15 +4,22 @@
         <div class="two-column">
             <section class="panel">
                 <h2>Personal information</h2>
-                <form method="post" action="">
+                <c:set var="pf" value="${empty profileForm ? profile : profileForm}" />
+                <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="profile">
                     <label>Full name
-                        <input class="form-control" name="name" type="text" value="${fn:escapeXml(profile.full_name)}" required>
+                        <input class="form-control ${not empty fieldErrors.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(pf.full_name)}" required aria-describedby="profile-name-error" ${not empty fieldErrors.name ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <label>Phone
-                        <input class="form-control" name="phone" type="tel" value="${fn:escapeXml(profile.phone)}" required>
+                    <c:if test="${not empty fieldErrors.name}"><div id="profile-name-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.name}" /></div></c:if>
+                    <label>Email
+                        <input class="form-control ${not empty fieldErrors.email ? 'is-invalid' : ''}" name="email" type="email" maxlength="254" value="${fn:escapeXml(pf.email)}" required aria-describedby="profile-email-error" ${not empty fieldErrors.email ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty fieldErrors.email}"><div id="profile-email-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.email}" /></div></c:if>
+                    <label>Phone (optional)
+                        <input class="form-control ${not empty fieldErrors.phone ? 'is-invalid' : ''}" name="phone" type="tel" maxlength="20" value="${fn:escapeXml(pf.phone)}" aria-describedby="profile-phone-error" ${not empty fieldErrors.phone ? 'aria-invalid="true"' : ''}>
+                    </label>
+                    <c:if test="${not empty fieldErrors.phone}"><div id="profile-phone-error" class="invalid-feedback d-block"><c:out value="${fieldErrors.phone}" /></div></c:if>
                     <button class="button">Save profile</button>
                 </form>
             </section>
