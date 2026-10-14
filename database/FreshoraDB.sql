@@ -559,4 +559,14 @@ EXEC sys.sp_executesql N'USE FreshoraDB;
 IF COL_LENGTH(''dbo.transactions'',''refund_scope'') IS NULL ALTER TABLE dbo.transactions ADD refund_scope varchar(20) NOT NULL CONSTRAINT df_refund_scope DEFAULT ''PURCHASE'';
 ';
 
+-- FE-01.2 (BA-03): the address an order was placed with, so only that address is locked while the order is open.
+-- No hard FK: a completed order must not prevent the address from being deleted later.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.orders'',''delivery_address_id'') IS NULL ALTER TABLE dbo.orders ADD delivery_address_id BIGINT NULL;
+';
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE name=''ix_orders_delivery_address'' AND object_id=OBJECT_ID(''dbo.orders''))
+ CREATE INDEX ix_orders_delivery_address ON dbo.orders(delivery_address_id) WHERE delivery_address_id IS NOT NULL;
+';
+
 PRINT N'Freshora database installation/upgrade completed.';

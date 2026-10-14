@@ -3,6 +3,7 @@ package service;
 import config.DBConnect;
 import dao.AddressDAO;
 import dao.Database;
+import dao.SettingDAO;
 import dao.UserDAO;
 import model.SessionUser;
 import org.mindrot.jbcrypt.BCrypt;
@@ -126,30 +127,54 @@ public class AccountService {
         }
     }
 
+    /** Provinces/cities with delivery service, for the address form. */
+    public List<String> serviceAreas() throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            return new SettingDAO().activeServiceAreas(c);
+        }
+    }
+
+    /** Only Customers and Sellers keep an address book (Permission Matrix, Address). */
+    public static boolean canManageAddresses(String role) {
+        return "CUSTOMER".equals(role) || "SELLER".equals(role);
+    }
+
     public void address(long uid, String action, String id, String name, String phone, String line, String ward, String district, String city, boolean primary) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                users.lockUser(c, uid);
+                // Locking the user row also serialises this with CheckoutService.place for the same user.
+                if (!canManageAddresses(users.lockRole(c, uid))) {
+                    throw Messages.error(Messages.MSG12);
+                }
                 Long aid = addressId(id);
                 if (aid != null && !addressDao.existsForUser(c, aid, uid)) {
                     throw Messages.error(Messages.MSG12);
                 }
-                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && addressDao.hasOpenOrder(c, uid)) {
-                    throw Messages.error(Messages.MSG19);
+                boolean delete = action.equals("deleteAddress");
+                if ((delete || action.equals("saveAddress")) && aid != null) {
+                    if (addressDao.usedByOpenOrder(c, aid, uid)) {
+                        throw Messages.error(Messages.MSG19);
+                    }
+                    if (addressDao.isStorePickup(c, aid, uid) && (delete || addressDao.pickupInActiveDelivery(c, aid, uid))) {
+                        throw Messages.error(Messages.MSG19);
+                    }
                 }
-                if (action.equals("deleteAddress")) {
+                if (delete) {
                     addressDao.delete(c, aid, uid);
                 } else if (action.equals("defaultAddress")) {
                     addressDao.clearDefault(c, uid);
                     addressDao.setDefault(c, aid, uid);
                 } else {
-                    name = Validation.text(name, 100);
-                    phone = Validation.text(phone, 20);
-                    line = Validation.text(line, 255);
-                    ward = Validation.text(ward, 100);
-                    district = Validation.text(district, 100);
-                    city = Validation.text(city, 100);
+                    Map<String, String> errors = new LinkedHashMap<>();
+                    String n = name, p = phone, l = line, w = ward, d = district, ct = city;
+                    name = FieldErrors.check(errors, "name", () -> Validation.field(n, 100, "recipient name", true));
+                    phone = FieldErrors.check(errors, "phone", () -> Validation.phone(p, true));
+                    line = FieldErrors.check(errors, "line", () -> Validation.field(l, 255, "address", true));
+                    ward = FieldErrors.check(errors, "ward", () -> Validation.field(w, 100, "ward", true));
+                    district = FieldErrors.check(errors, "district", () -> Validation.field(d, 100, "district", true));
+                    city = FieldErrors.check(errors, "city", () -> Validation.field(ct, 100, "province/city", true));
+                    FieldErrors.throwIfAny(errors);
                     if (primary) {
                         addressDao.clearDefault(c, uid);
                     }

@@ -16,9 +16,22 @@ public class AddressDAO {
         return Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=?", id, uid) != null;
     }
 
-    /** True when the user has any order that is still being processed. */
-    public boolean hasOpenOrder(Connection c, long uid) throws SQLException {
-        return Database.one(c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED')", uid) != null;
+    /**
+     * True when an open order of the user was placed with this address. Orders placed before
+     * delivery_address_id existed (NULL) still lock every address of the user.
+     */
+    public boolean usedByOpenOrder(Connection c, long id, long uid) throws SQLException {
+        return Database.one(c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED') AND (delivery_address_id=? OR delivery_address_id IS NULL)", uid, id) != null;
+    }
+
+    /** True when the address is the pickup address of the user's own store. */
+    public boolean isStorePickup(Connection c, long id, long uid) throws SQLException {
+        return Database.one(c, "SELECT id FROM stores WHERE owner_id=? AND pickup_address_id=?", uid, id) != null;
+    }
+
+    /** True when the user's store still has a seller order to be picked up from this address (READY…ARRIVING, or FAILED awaiting reassignment). */
+    public boolean pickupInActiveDelivery(Connection c, long id, long uid) throws SQLException {
+        return Database.one(c, "SELECT TOP 1 so.id FROM seller_orders so WITH(HOLDLOCK) JOIN stores s ON s.id=so.store_id WHERE s.owner_id=? AND s.pickup_address_id=? AND so.status IN ('READY','ASSIGNED','PICKED_UP','IN_TRANSIT','ARRIVING','FAILED')", uid, id) != null;
     }
 
     public int insert(Connection c, long uid, String name, String phone, String line, String ward, String district, String city, boolean primary) throws SQLException {

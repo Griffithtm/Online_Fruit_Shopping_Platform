@@ -15,6 +15,7 @@ import util.Messages;
 public class AccountServlet extends BaseServlet {
 
     private final AccountService service = new AccountService();
+    private static final String OTHER_CITY = "__other";
 
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
@@ -23,12 +24,25 @@ public class AccountServlet extends BaseServlet {
                 r.getSession().removeAttribute("flash");
                 r.setAttribute("message", flash);
             }
-            r.setAttribute("profile", service.profile(uid(r)));
-            r.setAttribute("addresses", service.addresses(uid(r)));
+            Map<String, Object> profile = service.profile(uid(r));
+            r.setAttribute("profile", profile);
+            boolean canManage = AccountService.canManageAddresses((String) profile.get("role"));
+            r.setAttribute("canManageAddresses", canManage);
+            if (canManage) {
+                r.setAttribute("addresses", service.addresses(uid(r)));
+                r.setAttribute("serviceAreas", service.serviceAreas());
+                r.setAttribute("deleteAddressConfirm", Messages.get(Messages.MSG06, "delete", "this address"));
+            }
             view(r, s, "account");
         } catch (Exception e) {
             throw new ServletException(e);
         }
+    }
+
+    /** Province/city from the service-area list, or the free text typed after choosing "Other". */
+    private static String city(HttpServletRequest r) {
+        String selected = r.getParameter("citySelect");
+        return OTHER_CITY.equals(selected) ? r.getParameter("cityOther") : selected;
     }
 
     protected void doPost(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
@@ -47,7 +61,16 @@ public class AccountServlet extends BaseServlet {
                 redirect(r,s,"/login?success=1");
                 return;
             } else if (java.util.Set.of("saveAddress", "deleteAddress", "defaultAddress").contains(a)) {
-                service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), r.getParameter("city"), "on".equals(r.getParameter("primary")));
+                service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), city(r), "on".equals(r.getParameter("primary")));
+                if ("saveAddress".equals(a)) {
+                    r.getSession().setAttribute("flash", Messages.get(Messages.MSG05, "Address"));
+                    redirect(r, s, "/account");
+                    return;
+                } else if ("defaultAddress".equals(a)) {
+                    r.getSession().setAttribute("flash", Messages.get(Messages.MSG18));
+                    redirect(r, s, "/account");
+                    return;
+                }
             } else {
                 throw new IllegalArgumentException("Invalid action.");
             }
@@ -60,6 +83,20 @@ public class AccountServlet extends BaseServlet {
                 form.put("email", r.getParameter("email"));
                 form.put("phone", r.getParameter("phone"));
                 r.setAttribute("profileForm", form);
+            } else if ("saveAddress".equals(r.getParameter("action"))) {
+                // Keys match the address row used by the JSP; addressFormId tells which address form failed.
+                Map<String, Object> form = new HashMap<>();
+                form.put("recipient_name", r.getParameter("name"));
+                form.put("phone", r.getParameter("phone"));
+                form.put("address_line", r.getParameter("line"));
+                form.put("ward", r.getParameter("ward"));
+                form.put("district", r.getParameter("district"));
+                form.put("city", city(r));
+                form.put("other_city", OTHER_CITY.equals(r.getParameter("citySelect")));
+                form.put("is_default", "on".equals(r.getParameter("primary")));
+                String id = r.getParameter("id");
+                r.setAttribute("addressForm", form);
+                r.setAttribute("addressFormId", id == null || id.isBlank() ? "new" : id.trim());
             }
             if (e instanceof FieldErrors fe) {
                 r.setAttribute("fieldErrors", fe.getErrors());

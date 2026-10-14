@@ -8,7 +8,7 @@ import java.util.concurrent.*;
 
 public class IterationOneChecks {
     static String tag="I1"+System.currentTimeMillis();
-    static long buyer,seller,other,store,store2,listing,variant,category;
+    static long buyer,seller,other,courier,store,store2,listing,variant,category;
     static Connection open() throws Exception {return new DBConnect().getConnection();}
     static long number(Object o){return ((Number)o).longValue();}
     static void check(boolean ok,String name){if(!ok)throw new AssertionError(name);System.out.println("PASS "+name);}
@@ -66,6 +66,29 @@ public class IterationOneChecks {
           check(before.equals(after) && "CUSTOMER".equals(after.get("role")),"profile: role and points unchanged by profile saves");}
         as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","City",false);
         check(Boolean.TRUE.equals(as.addresses(buyer).get(0).get("is_default")),"first address automatically default");
+        String msg19=util.Messages.get(util.Messages.MSG19),msg12=util.Messages.get(util.Messages.MSG12);
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","abc","Line","Ward","District","City",false),"Enter a valid phone number.","address: phone letters give MSG04");
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer"," ","Line","Ward","District","City",false),"Phone number is required.","address: blank phone gives MSG02");
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","",false),"Province/city is required.","address: blank province (Other left empty) gives MSG02");
+        as.address(buyer,"saveAddress",null,"Second","0900 000 001","Line 2","Ward","District","City",false);
+        long usedAddress=number(as.addresses(buyer).get(0).get("id")),freeAddress=number(as.addresses(buyer).get(1).get("id"));
+        check("0900000001".equals(as.addresses(buyer).get(1).get("phone")),"address: phone normalised before saving");
+        long addressOrder;
+        try(Connection c=open()){addressOrder=Database.insert(c,"INSERT orders(customer_id,order_code,status,recipient_name,recipient_phone,delivery_address,delivery_address_id,payment_method,placed_at) VALUES(?,?,'CONFIRMED','Test','0900000000','Test address',?,'COD',SYSUTCDATETIME())",buyer,tag+"a",usedAddress);}
+        rejectWith(()->as.address(buyer,"saveAddress",""+usedAddress,"Buyer","0900000000","Changed","Ward","District","City",true),msg19,"address used by an open order cannot be edited (MSG19)");
+        rejectWith(()->as.address(buyer,"deleteAddress",""+usedAddress,null,null,null,null,null,null,false),msg19,"address used by an open order cannot be deleted (MSG19)");
+        as.address(buyer,"saveAddress",""+freeAddress,"Second","0900000001","Changed line","Ward","District","City",false);
+        check(as.addresses(buyer).stream().anyMatch(a->"Changed line".equals(a.get("address_line"))),"address not used by the open order can still be edited");
+        as.address(seller,"saveAddress",null,"Seller","0900000002","Pickup","Ward","District","City",true);
+        long pickup=number(as.addresses(seller).get(0).get("id"));
+        try(Connection c=open()){Database.update(c,"UPDATE stores SET pickup_address_id=? WHERE id=?",pickup,store);}
+        rejectWith(()->as.address(seller,"deleteAddress",""+pickup,null,null,null,null,null,null,false),msg19,"store pickup address cannot be deleted (MSG19)");
+        as.address(seller,"saveAddress",""+pickup,"Seller","0900000002","Pickup 2","Ward","District","City",true);
+        check("Pickup 2".equals(as.addresses(seller).get(0).get("address_line")),"pickup address editable while no delivery is pending");
+        try(Connection c=open()){Database.insert(c,"INSERT seller_orders(order_id,store_id,status) VALUES(?,?,'READY')",addressOrder,store);}
+        rejectWith(()->as.address(seller,"saveAddress",""+pickup,"Seller","0900000002","Pickup 3","Ward","District","City",true),msg19,"pickup address of a READY seller order cannot be edited (MSG19)");
+        try(Connection c=open()){courier=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'unused',?,'DELIVERY_STAFF')",tag+"d@test.invalid",tag);}
+        rejectWith(()->as.address(courier,"saveAddress",null,"Courier","0900000003","Line","Ward","District","City",false),msg12,"delivery staff cannot add an address (MSG12)");
         CartService cart=new CartService();cart.change(buyer,"add",variant,2);
         check(cart.lines(buyer).size()==1 && number(cart.lines(buyer).get(0).get("quantity"))==2,"cart add and totals");
         reject(()->cart.change(buyer,"add",variant,2),"cart rejects quantity above stock");
@@ -85,6 +108,7 @@ public class IterationOneChecks {
         gate.countDown();int successes=0;
         try{for(Future<Boolean> result:results)if(result.get(30,TimeUnit.SECONDS))successes++;}finally{pool.shutdownNow();}
         check(successes==1,"concurrent orders: exactly one reserves the last stock");
+        rejectWith(()->as.address(buyer,"saveAddress",""+freeAddress,"Second","0900000001","Line","Ward","District","City",false),msg19,"open order without delivery_address_id still locks every address (legacy)");
         try(Connection c=open()) {
           check(number(Database.one(c,"SELECT SUM(reserved_qty) n FROM batches WHERE variant_id=?",variant).get("n"))==2,"retry is idempotent; failed allocation rolls back");
           check(number(Database.one(c,"SELECT reserved_qty FROM batches WHERE batch_no=?",tag).get("reserved_qty"))==1,"FEFO consumes the earlier expiry batch first");
@@ -102,8 +126,8 @@ public class IterationOneChecks {
         Database.update(c,"DELETE FROM variants WHERE listing_id IN (SELECT id FROM listings WHERE store_id IN (?,?))",store,store2);
         Database.update(c,"DELETE FROM listings WHERE store_id IN (?,?)",store,store2);
         Database.update(c,"DELETE FROM stores WHERE id IN (?,?)",store,store2);
-        Database.update(c,"DELETE FROM addresses WHERE user_id=?",buyer);
-        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?)",buyer,seller,other);
+        Database.update(c,"DELETE FROM addresses WHERE user_id IN (?,?)",buyer,seller);
+        Database.update(c,"DELETE FROM users WHERE id IN (?,?,?,?)",buyer,seller,other,courier);
         c.commit();
       }
     }

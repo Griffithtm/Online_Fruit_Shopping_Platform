@@ -26,6 +26,12 @@ public class UserDAO {
         return Database.one(c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
     }
 
+    /** Locks the user row and returns its role as stored in the database, or null if the user does not exist. */
+    public String lockRole(Connection c, long id) throws SQLException {
+        Map<String, Object> u = Database.one(c, "SELECT role FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
+        return u == null ? null : (String) u.get("role");
+    }
+
     /** Locks the user row and returns its password hash, or null if the user does not exist. */
     public String lockPasswordHash(Connection c, long id) throws SQLException {
         Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
