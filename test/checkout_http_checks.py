@@ -17,7 +17,7 @@ c=Client();check(c.req('/checkout')[2].endswith('/login'),'checkout requires log
 email='checkout-http-'+str(int(time.time()*1000))+'@test.invalid';Path('tmp/checkout/email.txt').write_text(email)
 c.post('/register/customer',dict(email=email,password='TestOnly@123',confirm='TestOnly@123',name='Checkout Test',phone='0900000000'))
 c.post('/login',dict(email=email,password='TestOnly@123'))
-c.post('/account',dict(action='saveAddress',name='Checkout Test',phone='0900000000',line='1 Test',ward='Test',district='Test',city='Hà Nội',primary='on'))
+c.post('/account',dict(action='saveAddress',name='Checkout Test',phone='0900000000',line='1 Test',ward='Test',district='Test',citySelect='Hà Nội',primary='on'))
 c.post('/cart',dict(action='add',id=1,quantity=1))
 body=c.req('/checkout')[1];address=re.search(r'<option value="(\d+)"',body).group(1)
 status,body,_=c.req('/checkout?address='+address);check(status==200 and 'Đặt hàng' in body,'checkout JSP and delivery quote')

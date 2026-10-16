@@ -18,6 +18,11 @@ public final class SessionUser implements Serializable {
         this.role = role;
     }
 
+    /** Same session identity with an updated display name (after a profile change). */
+    public SessionUser withName(String newName) {
+        return new SessionUser(id, newName, role, credential);
+    }
+
     public boolean credentialsMatch(String hash) { return credential != null && credential.equals(hash); }
 
     public long getId() {

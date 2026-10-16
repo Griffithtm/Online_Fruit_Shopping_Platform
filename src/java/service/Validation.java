@@ -1,6 +1,8 @@
 package service;
 
 import java.math.BigDecimal;
+import java.util.Locale;
+import util.Messages;
 
 public final class Validation {
 
@@ -9,6 +11,45 @@ public final class Validation {
             throw new IllegalArgumentException("Vui lòng nhập đủ thông tin, đúng độ dài.");
         }
         return v.trim();
+    }
+
+    /** Trimmed text checked against MSG02/MSG03 for {@code field}; an optional blank value returns null. */
+    public static String field(String v, int max, String field, boolean required) {
+        String t = v == null ? "" : v.trim();
+        if (t.isEmpty()) {
+            if (required) {
+                throw Messages.error(Messages.MSG02, field);
+            }
+            return null;
+        }
+        if (t.length() > max) {
+            throw Messages.error(Messages.MSG03, field, max);
+        }
+        return t;
+    }
+
+    /** Lower-case email, at most 254 characters (MSG02/MSG03/MSG04). */
+    public static String email(String v) {
+        String t = field(v, 254, "địa chỉ thư điện tử", true).toLowerCase(Locale.ROOT);
+        if (!t.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
+            throw Messages.error(Messages.MSG04, "địa chỉ thư điện tử");
+        }
+        return t;
+    }
+
+    /** Phone of 7–15 digits with an optional leading +; spaces, dots and hyphens are removed first. */
+    public static String phone(String v, boolean required) {
+        String t = v == null ? "" : v.trim().replaceAll("[\\s.\\-]", "");
+        if (t.isEmpty()) {
+            if (required) {
+                throw Messages.error(Messages.MSG02, "số điện thoại");
+            }
+            return null;
+        }
+        if (!t.matches("\\+?[0-9]{7,15}")) {
+            throw Messages.error(Messages.MSG04, "số điện thoại");
+        }
+        return t;
     }
 
     public static long id(String v) {

@@ -4,6 +4,12 @@ import model.*;
 
 import config.DBConnect;
 import dao.Database;
+import dao.UserDAO;
+import dao.AddressDAO;
+import dao.SettingDAO;
+import dao.AuditDAO;
+import util.Messages;
+import util.FieldErrors;
 import org.mindrot.jbcrypt.BCrypt;
 import java.sql.*;
 import java.util.*;
@@ -12,6 +18,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 
 public class AccountService {
+    private final UserDAO users = new UserDAO();
+    private final AddressDAO addressDao = new AddressDAO();
+    private final AuditDAO audit = new AuditDAO();
 
     private static boolean matches(String plain, String hash) {
         return plain != null && hash != null && BCrypt.checkpw(plain, hash.replaceFirst("^\\$2[by]\\$", "\\$2a\\$"));
@@ -49,75 +58,210 @@ public class AccountService {
 
     public User profile(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.one(User.class, c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
+            return users.findProfile(c, id);
         }
     }
 
     public List<Address> addresses(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.rows(Address.class, c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", id);
+            return addressDao.findByUser(c, id);
         }
     }
 
-    public void profile(long id, String name, String phone) throws Exception {
-        try (Connection c = new DBConnect().getConnection()) {
-            Database.update(c, "UPDATE users SET full_name=?,phone=?,updated_at=SYSUTCDATETIME() WHERE id=?", Validation.text(name, 100), Validation.text(phone, 20), id);
-        }
-    }
-
-    public void password(long id, String old, String pass, String confirm) throws Exception {
-        Validation.password(pass, confirm);
+    /** Updates name, email and phone of the current user; returns the saved name. Errors are reported per field. */
+    public String profile(long id, String name, String email, String phone) throws Exception {
+        Map<String, String> errors = new LinkedHashMap<>();
+        String n = FieldErrors.check(errors, "name", () -> Validation.field(name, 100, "họ tên", true));
+        String e = FieldErrors.check(errors, "email", () -> Validation.email(email));
+        String p = FieldErrors.check(errors, "phone", () -> Validation.phone(phone, false));
+        FieldErrors.throwIfAny(errors);
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-            User u = Database.one(User.class, c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
-            if (!matches(old, u.getPasswordHash())) {
-                throw new IllegalArgumentException("Mật khẩu hiện tại không đúng.");
+                users.lockUser(c, id);
+                if (users.emailTakenByOther(c, e, id)) {
+                    throw FieldErrors.of("email", Messages.get(Messages.MSG13));
+                }
+                User before = users.findProfile(c, id);
+                users.updateProfile(c, id, n, e, p);
+                audit.log(c, id, "User", id, "PROFILE_UPDATED", profileJson(before.getFullName(), before.getEmail(), before.getPhone()), profileJson(n, e, p), null);
+                c.commit();
+                return n;
+            } catch (SQLException ex) {
+                c.rollback();
+                // 2627/2601: unique key violation; email is the only unique column this UPDATE writes.
+                if (ex.getErrorCode() == 2627 || ex.getErrorCode() == 2601) {
+                    throw FieldErrors.of("email", Messages.get(Messages.MSG13));
+                }
+                throw ex;
+            } catch (Exception ex) {
+                c.rollback();
+                throw ex;
             }
-            Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), id);
-            Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", id);
-            c.commit();
-            } catch(Exception ex) {c.rollback();throw ex;}
         }
     }
 
-    public void address(long uid, String action, String id, String name, String phone, String line, String ward, String district, String city, boolean primary) throws Exception {
+    private static String profileJson(Object name, Object email, Object phone) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("full_name", name);
+        m.put("email", email);
+        m.put("phone", phone);
+        return AuditDAO.json(m);
+    }
+
+    private static String addressJson(Address a) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("recipient_name", a.getRecipientName());
+        m.put("phone", a.getPhone());
+        m.put("address_line", a.getAddressLine());
+        m.put("ward", a.getWard());
+        m.put("district", a.getDistrict());
+        m.put("city", a.getCity());
+        m.put("is_default", a.getIsDefault());
+        return AuditDAO.json(m);
+    }
+
+    /**
+     * Changes the password after checking the current one (FE-01.2, BA-06). Passwords are never trimmed.
+     * Errors are reported per field: old, password, confirm. Validation.password is shared and left unchanged.
+     */
+    public void password(long id, String old, String pass, String confirm) throws Exception {
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (old == null || old.isEmpty()) {
+            errors.put("old", Messages.get(Messages.MSG02, "mật khẩu hiện tại"));
+        }
+        if (pass == null || pass.isEmpty()) {
+            errors.put("password", Messages.get(Messages.MSG02, "mật khẩu mới"));
+        } else if (pass.length() > 64) {
+            errors.put("password", Messages.get(Messages.MSG03, "mật khẩu mới", 64));
+        } else if (pass.length() < 8 || pass.getBytes(StandardCharsets.UTF_8).length > 72) {
+            errors.put("password", Messages.get(Messages.MSG04, "mật khẩu mới (8–64 ký tự)"));
+        }
+        if (!Objects.equals(pass, confirm)) {
+            errors.put("confirm", Messages.get(Messages.MSG16));
+        }
+        FieldErrors.throwIfAny(errors);
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
-                Long aid = (id == null || id.isBlank()) ? null : Validation.id(id);
-                if (aid != null && Database.one(Address.class, c, "SELECT id FROM addresses WHERE id=? AND user_id=?", aid, uid) == null) {
-                    throw new IllegalArgumentException("Không tìm thấy địa chỉ.");
+                String hash = users.lockPasswordHash(c, id);
+                if (!matches(old, hash)) {
+                    throw FieldErrors.of("old", Messages.get(Messages.MSG04, "mật khẩu hiện tại"));
                 }
-                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && Database.one(Order.class, c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED')", uid) != null) {
-                    throw new IllegalArgumentException("Chưa thể sửa/xóa địa chỉ khi còn đơn đang xử lý.");
+                if (matches(pass, hash)) {
+                    throw FieldErrors.of("password", Messages.get(Messages.MSG04, "mật khẩu mới") + " Mật khẩu mới phải khác mật khẩu hiện tại.");
                 }
-                if (action.equals("deleteAddress")) {
-                    Database.update(c, "DELETE FROM addresses WHERE id=? AND user_id=?", aid, uid);
+                users.updatePasswordHash(c, id, BCrypt.hashpw(pass, BCrypt.gensalt(12)));
+                users.invalidateResetTokens(c, id);
+                // Never log the password or its hash.
+                audit.log(c, id, "User", id, "PASSWORD_CHANGED", null, null, null);
+                c.commit();
+            } catch (Exception ex) {
+                c.rollback();
+                throw ex;
+            }
+        }
+    }
+
+    /** Parses an address id; a malformed id is reported like a foreign one (MSG12). */
+    private static Long addressId(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        try {
+            return Validation.id(id);
+        } catch (IllegalArgumentException e) {
+            throw Messages.error(Messages.MSG12);
+        }
+    }
+
+    /** Provinces/cities with delivery service, for the address form. */
+    public List<String> serviceAreas() throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            return new SettingDAO().activeServiceAreas(c);
+        }
+    }
+
+    /** Only Customers and Sellers keep an address book (Permission Matrix, Address). */
+    public static boolean canManageAddresses(String role) {
+        return "CUSTOMER".equals(role) || "SELLER".equals(role);
+    }
+
+    /**
+     * Saves, deletes or sets the default address of the current user and returns the success message.
+     * {@code primary} only applies to a new address; an edit never changes which address is the default (BA-04).
+     */
+    public String address(long uid, String action, String id, String name, String phone, String line, String ward, String district, String city, boolean primary) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                // Locking the user row also serialises this with CheckoutService.place for the same user.
+                if (!canManageAddresses(users.lockRole(c, uid))) {
+                    throw Messages.error(Messages.MSG12);
+                }
+                boolean delete = action.equals("deleteAddress");
+                Long aid = addressId(id);
+                if ((aid == null && (delete || action.equals("defaultAddress"))) || (aid != null && !addressDao.existsForUser(c, aid, uid))) {
+                    throw Messages.error(Messages.MSG12);
+                }
+                if ((delete || action.equals("saveAddress")) && aid != null) {
+                    if (addressDao.usedByOpenOrder(c, aid, uid)) {
+                        throw Messages.error(Messages.MSG19);
+                    }
+                    if (addressDao.isStorePickup(c, aid, uid) && (delete || addressDao.pickupInActiveDelivery(c, aid, uid))) {
+                        throw Messages.error(Messages.MSG19);
+                    }
+                }
+                String message;
+                Address before = aid == null ? null : addressDao.findById(c, aid, uid);
+                if (delete) {
+                    boolean wasDefault = Boolean.TRUE.equals(before.getIsDefault());
+                    addressDao.delete(c, aid, uid);
+                    message = Messages.get(Messages.MSG81);
+                    String note = null;
+                    if (wasDefault) {
+                        // The oldest remaining address takes over, and the user is told which one.
+                        addressDao.makeFirstDefault(c, uid);
+                        Address next = addressDao.findDefault(c, uid);
+                        if (next != null) {
+                            message = Messages.get(Messages.MSG82, next.getRecipientName() + " - " + next.getAddressLine() + ", "
+                                    + next.getWard() + ", " + next.getDistrict() + ", " + next.getCity());
+                            note = "Default moved to address #" + next.getId();
+                        }
+                    }
+                    audit.log(c, uid, "Address", aid, "ADDRESS_DELETED", addressJson(before), null, note);
                 } else if (action.equals("defaultAddress")) {
-                    Database.update(c, "UPDATE addresses SET is_default=0 WHERE user_id=?", uid);
-                    Database.update(c, "UPDATE addresses SET is_default=1 WHERE id=? AND user_id=?", aid, uid);
+                    Address previous = addressDao.findDefault(c, uid);
+                    addressDao.clearDefault(c, uid);
+                    addressDao.setDefault(c, aid, uid);
+                    audit.log(c, uid, "Address", aid, "ADDRESS_DEFAULT_SET", previous == null ? null : previous.getId().toString(), aid.toString(), null);
+                    message = Messages.get(Messages.MSG18);
                 } else {
-                    name = Validation.text(name, 100);
-                    phone = Validation.text(phone, 20);
-                    line = Validation.text(line, 255);
-                    ward = Validation.text(ward, 100);
-                    district = Validation.text(district, 100);
-                    city = Validation.text(city, 100);
-                    if (primary) {
-                        Database.update(c, "UPDATE addresses SET is_default=0 WHERE user_id=?", uid);
-                    }
+                    Map<String, String> errors = new LinkedHashMap<>();
+                    String n = name, p = phone, l = line, w = ward, d = district, ct = city;
+                    name = FieldErrors.check(errors, "name", () -> Validation.field(n, 100, "tên người nhận", true));
+                    phone = FieldErrors.check(errors, "phone", () -> Validation.phone(p, true));
+                    line = FieldErrors.check(errors, "line", () -> Validation.field(l, 255, "địa chỉ", true));
+                    ward = FieldErrors.check(errors, "ward", () -> Validation.field(w, 100, "phường/xã", true));
+                    district = FieldErrors.check(errors, "district", () -> Validation.field(d, 100, "quận/huyện", true));
+                    city = FieldErrors.check(errors, "city", () -> Validation.field(ct, 100, "tỉnh/thành phố", true));
+                    FieldErrors.throwIfAny(errors);
                     if (aid == null) {
-                        Database.update(c, "INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city,is_default) VALUES(?,?,?,?,?,?,?,?)", uid, name, phone, line, ward, district, city, primary);
+                        // The first address is always the default.
+                        boolean makeDefault = primary || !addressDao.hasDefault(c, uid);
+                        if (makeDefault) {
+                            addressDao.clearDefault(c, uid);
+                        }
+                        long newId = addressDao.insert(c, uid, name, phone, line, ward, district, city, makeDefault);
+                        audit.log(c, uid, "Address", newId, "ADDRESS_CREATED", null, addressJson(addressDao.findById(c, newId, uid)), null);
                     } else {
-                        Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?", name, phone, line, ward, district, city, primary, aid, uid);
+                        addressDao.update(c, aid, uid, name, phone, line, ward, district, city);
+                        audit.log(c, uid, "Address", aid, "ADDRESS_UPDATED", addressJson(before), addressJson(addressDao.findById(c, aid, uid)), null);
                     }
-                }
-                if (Database.one(Address.class, c, "SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid)==null) {
-                    Database.update(c,"UPDATE addresses SET is_default=1 WHERE id=(SELECT MIN(id) FROM addresses WHERE user_id=?)",uid);
+                    message = Messages.get(Messages.MSG05, "Địa chỉ");
                 }
                 c.commit();
+                return message;
             } catch (Exception e) {
                 c.rollback();
                 throw e;
