@@ -1,3 +1,4 @@
+import model.*;
 import config.DBConnect;
 import dao.Database;
 import service.StockReservationService;
@@ -11,7 +12,7 @@ public class CartStockChecks {
   try(Connection c=new DBConnect().getConnection()) {
    c.setAutoCommit(false);
    try {
-    Map<String,Object> p=Database.one(c,"SELECT TOP 1 * FROM v_public_products WHERE available_qty>=2 ORDER BY variant_id");
+    Map<String,Object> p=TestRows.one(c,"SELECT TOP 1 * FROM v_public_products WHERE available_qty>=2 ORDER BY variant_id");
     if(p==null)throw new IllegalStateException("Test requires one demo product with stock >=2");
     long uid=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'test-only','Stock test','CUSTOMER')","stock-check-"+UUID.randomUUID()+"@example.invalid");
     long oid=Database.insert(c,"INSERT orders(customer_id,status,order_code,recipient_name,recipient_phone,delivery_address,payment_method,placed_at) VALUES(?,'PLACED',LEFT(CONVERT(varchar(36),NEWID()),18),'Test','0900000000','Test address','COD',SYSUTCDATETIME())",uid);
@@ -24,15 +25,15 @@ public class CartStockChecks {
     c.rollback(baseline); baseline=c.setSavepoint();
     Database.update(c,"UPDATE order_items SET quantity=? WHERE id=?",n(p.get("available_qty"))+1,item);
     try{service.reserveOrder(c,oid);throw new AssertionError("oversell");}catch(IllegalArgumentException expected){ok(true,"insufficient stock rejected");}
-    ok(n(Database.one(c,"SELECT COUNT(*) n FROM stock_movements WHERE order_item_id=?",item).get("n"))==0,"failed reservation rolls back movement records");
-    ok(n(Database.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty")),"failed reservation restores all stock");
+    ok(n(TestRows.one(c,"SELECT COUNT(*) n FROM stock_movements WHERE order_item_id=?",item).get("n"))==0,"failed reservation rolls back movement records");
+    ok(n(TestRows.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty")),"failed reservation restores all stock");
     c.rollback(baseline); baseline=c.setSavepoint();
     service.reserveOrder(c,oid);service.reserveOrder(c,oid);
-    ok(n(Database.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty"))-2,"reserve repeated without double hold");
+    ok(n(TestRows.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty"))-2,"reserve repeated without double hold");
     try{service.release(c,sid);throw new AssertionError("active release accepted");}catch(IllegalArgumentException expected){ok(true,"active order cannot release stock");}
     Database.update(c,"UPDATE orders SET status='EXPIRED' WHERE id=?",oid);
     service.release(c,sid);service.release(c,sid);
-    ok(n(Database.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty")),"expired order releases exactly once");
+    ok(n(TestRows.one(c,"SELECT available_qty FROM v_available_stock WHERE variant_id=?",p.get("variant_id")).get("available_qty"))==n(p.get("available_qty")),"expired order releases exactly once");
    } finally {c.rollback();}
   }
  }

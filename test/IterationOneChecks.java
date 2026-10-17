@@ -1,3 +1,4 @@
+import model.*;
 import config.DBConnect;
 import dao.Database;
 import service.*;
@@ -24,14 +25,14 @@ public class IterationOneChecks {
         other=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'unused',?,'SELLER')",tag+"o@test.invalid",tag);
         store=Database.insert(c,"INSERT stores(owner_id,store_name) VALUES(?,?)",seller,tag+"store");
         store2=Database.insert(c,"INSERT stores(owner_id,store_name) VALUES(?,?)",other,tag+"other");
-        category=number(Database.one(c,"SELECT TOP 1 id FROM settings WHERE type='CATEGORY' AND status='ACTIVE'").get("id"));
+        category=number(TestRows.one(c,"SELECT TOP 1 id FROM settings WHERE type='CATEGORY' AND status='ACTIVE'").get("id"));
       }
       try {
         SellerService ss=new SellerService(); AccountService as=new AccountService(); CatalogService cs=new CatalogService();
         ss.listing(seller,null,tag,"Integration test",String.valueOf(category),"Test origin","Test harvest");
-        listing=number(ss.listings(seller).get(0).get("id"));
+        listing=number(ss.listings(seller).get(0).getId());
         ss.variant(seller,null,listing,"500 g box","box","25000",false);
-        variant=number(ss.variants(seller).get(0).get("id"));
+        variant=number(ss.variants(seller).get(0).getId());
         reject(()->ss.listing(other,""+listing,"Intrusion","",String.valueOf(category),"Test",""),"seller ownership enforcement");
         ss.submit(seller,listing);
         check(cs.product(listing)==null,"pending listing is not public");
@@ -45,11 +46,11 @@ public class IterationOneChecks {
         check(ss.suggestions(other,tag).size()==1,"other seller receives matching suggestion");
         reject(()->cs.products(tag,null,null,"100","10",null,"new",false,"all"),"invalid price interval rejected");
         as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","City",false);
-        check(Boolean.TRUE.equals(as.addresses(buyer).get(0).get("is_default")),"first address automatically default");
+        check(Boolean.TRUE.equals(as.addresses(buyer).get(0).getIsDefault()),"first address automatically default");
         CartService cart=new CartService();cart.change(buyer,"add",variant,2);
-        check(cart.lines(buyer).size()==1 && number(cart.lines(buyer).get(0).get("quantity"))==2,"cart add and totals");
+        check(cart.lines(buyer).size()==1 && number(cart.lines(buyer).get(0).getQuantity())==2,"cart add and totals");
         reject(()->cart.change(buyer,"add",variant,2),"cart rejects quantity above stock");
-        long line=number(cart.lines(buyer).get(0).get("id"));cart.change(buyer,"update",line,1);cart.change(buyer,"remove",line,0);
+        long line=number(cart.lines(buyer).get(0).getId());cart.change(buyer,"update",line,1);cart.change(buyer,"remove",line,0);
         check(cart.lines(buyer).isEmpty(),"cart update and removal");
         long[] orders=new long[2];
         try(Connection c=open()) {
@@ -66,8 +67,8 @@ public class IterationOneChecks {
         try{for(Future<Boolean> result:results)if(result.get(30,TimeUnit.SECONDS))successes++;}finally{pool.shutdownNow();}
         check(successes==1,"concurrent orders: exactly one reserves the last stock");
         try(Connection c=open()) {
-          check(number(Database.one(c,"SELECT SUM(reserved_qty) n FROM batches WHERE variant_id=?",variant).get("n"))==2,"retry is idempotent; failed allocation rolls back");
-          check(number(Database.one(c,"SELECT reserved_qty FROM batches WHERE batch_no=?",tag).get("reserved_qty"))==1,"FEFO consumes the earlier expiry batch first");
+          check(number(TestRows.one(c,"SELECT SUM(reserved_qty) n FROM batches WHERE variant_id=?",variant).get("n"))==2,"retry is idempotent; failed allocation rolls back");
+          check(number(TestRows.one(c,"SELECT reserved_qty FROM batches WHERE batch_no=?",tag).get("reserved_qty"))==1,"FEFO consumes the earlier expiry batch first");
         }
       } finally {cleanup();}
     }

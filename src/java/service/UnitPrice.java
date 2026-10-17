@@ -1,5 +1,7 @@
 package service;
 
+import model.*;
+
 import java.math.*;
 import java.util.*;
 import java.util.regex.*;
@@ -16,9 +18,9 @@ public final class UnitPrice {
         if (m.find() || weight.signum() <= 0) return null;
         return price.divide(weight, 2, RoundingMode.HALF_UP);
     }
-    public static void decorate(List<Map<String,Object>> products) {
-        for (Map<String,Object> p : products) {
-            p.put("unit_price_kg", perKg((String)p.get("option_name"), (BigDecimal)p.get("price")));
+    public static void decorate(List<ProductOffer> products) {
+        for (ProductOffer p : products) {
+            p.setUnitPriceKg(perKg(p.getOptionName(), p.getPrice()));
         }
     }
 }

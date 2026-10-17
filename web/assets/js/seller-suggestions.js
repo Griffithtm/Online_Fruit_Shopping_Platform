@@ -16,16 +16,16 @@ document.querySelectorAll('[data-suggestions]').forEach(input => {
                 if (!response.ok) throw new Error('Unavailable');
                 const rows = await response.json();
                 if (current.signal.aborted) return;
-                list.textContent = rows.length ? 'Other stores - highest price first:' : 'No comparable offers found.';
+                list.textContent = rows.length ? 'Cửa hàng khác — giá từ cao xuống thấp:' : 'Không tìm thấy sản phẩm tương tự.';
                 rows.forEach(row => {
                     const line = document.createElement('div');
                     const link = document.createElement('a');
                     link.href = input.dataset.productUrl + '?id=' + row.id;
-                    link.textContent = `${row.title} \u00b7 ${row.store} \u00b7 ${row.pack} \u00b7 ${Number(row.price).toLocaleString('en-US')} VND` +
-                        (row.perKg == null ? '' : ` \u00b7 ${Number(row.perKg).toLocaleString('en-US')} VND/kg`);
+                    link.textContent = `${row.title} \u00b7 ${row.store} \u00b7 ${row.pack} \u00b7 ${Number(row.price).toLocaleString('vi-VN')} đ` +
+                        (row.perKg == null ? '' : ` \u00b7 ${Number(row.perKg).toLocaleString('vi-VN')} đ/kg`);
                     line.append(link);list.append(line);
                 });
-            } catch (error) { if (error.name !== 'AbortError') list.textContent = 'Suggestions are temporarily unavailable.'; }
+            } catch (error) { if (error.name !== 'AbortError') list.textContent = 'Tạm thời không thể tải gợi ý sản phẩm.'; }
         }, 250);
     });
 });

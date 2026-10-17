@@ -8,8 +8,8 @@
     }
 %>
 <!DOCTYPE html>
-<html lang="en">
-    <head><meta charset="UTF-8"><title>Freshora - Update price</title>
+<html lang="vi">
+    <head><meta charset="UTF-8"><title>Freshora - Cập nhật giá</title>
         <style>body{
             font-family:Arial;
             margin:40px;
@@ -37,12 +37,12 @@
             color:#24562b
         }</style></head>
     <body>
-        <h1>Freshora - Update Variant Price</h1>
-        <p>HoangTM | Local demo seller: seller@freshora.demo (Freshora Garden)</p>
-        <p>This demo uses a fixed seller and does not include login.</p>
+        <h1>Freshora - Cập nhật giá biến thể</h1>
+        <p>HoangTM — Người bán minh họa: seller@freshora.demo (Nhà vườn Freshora)</p>
+        <p>Bản minh họa sử dụng người bán cố định và không yêu cầu đăng nhập.</p>
         <p class="notice"><%= html(request.getAttribute("message")) %></p>
         <table>
-            <tr><th>ID</th><th>Product</th><th>Variant</th><th>Current price (VND)</th><th>New price (VND)</th></tr>
+            <tr><th>Mã</th><th>Sản phẩm</th><th>Biến thể</th><th>Giá hiện tại (đ)</th><th>Giá mới (đ)</th></tr>
                     <% List<PriceVariant> variants = (List<PriceVariant>) request.getAttribute("variants");
    if (variants != null) { for (PriceVariant v : variants) { %>
             <tr><td><%=v.getId()%></td><td><%=html(v.getProductName())%></td>
@@ -50,8 +50,8 @@
                 <td><form method="post" action="<%=request.getContextPath()%>/demo/prices">
                         <input type="hidden" name="token" value="<%=html(session.getAttribute("priceToken"))%>">
                         <input type="hidden" name="variantId" value="<%=v.getId()%>">
-                        <input aria-label="New price" type="number" name="price" min="0.01" max="9999999999999999.99" step="0.01" value="<%=v.getPrice().toPlainString()%>" required>
-                        <button type="submit">Save price</button></form></td></tr>
+                        <input aria-label="Giá mới" type="number" name="price" min="0.01" max="9999999999999999.99" step="0.01" value="<%=v.getPrice().toPlainString()%>" required>
+                        <button type="submit">Lưu giá</button></form></td></tr>
                         <% } } %>
         </table>
     </body></html>

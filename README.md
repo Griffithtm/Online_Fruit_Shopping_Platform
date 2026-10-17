@@ -32,7 +32,7 @@ Build output and personal NetBeans settings are ignored. Configure credentials l
 
 ## Database and template
 
-- Run `database/FreshoraDB.sql` in SQL Server Management Studio with F5. The script creates FreshoraDB if missing, then applies Iteration 2 schema and English catalog updates without resetting existing business records.
+- Run `database/FreshoraDB.sql` in SQL Server Management Studio with F5. The script creates FreshoraDB if missing, then applies Iteration 2 schema and Vietnamese catalog updates without resetting existing business records.
 - Edit `URL`, `USER`, and `PASSWORD` directly in `src/java/config/DBConnect.java` for your machine. The committed password is `CHANGE_ME`.
 - Original Sarab source and documentation: `templates/sarab-1.0.0/`.
 - Application CSS, scripts, images, and fonts: `web/assets/`.
@@ -51,7 +51,7 @@ Customer and Seller registration remain separate. Iteration 2 adds checkout, ful
 - JDBC and other dependencies are included in `web/WEB-INF/lib`.
 - Password recovery supports Gmail SMTP with STARTTLS and an App Password. See configuration below. Explicit local outbox mode is also available.
 - Uploaded listing images are stored in `freshora-uploads` under Tomcat base. Uploading a replacement image set returns the listing to Draft.
-- Banner, About and demo product images use local fruit photos. Run database/FreshoraDB.sql to apply the included English demo catalog and image paths.
+- Banner, About and demo product images use local fruit photos. Run database/FreshoraDB.sql to apply the included Vietnamese demo catalog and image paths.
 - Cart operations do not reserve stock. Checkout reserves stock with transactional FEFO allocation. Cancellation, rejection and payment expiry release holds; delivery consumes them.
 - Sessions expire after 30 minutes of inactivity. Password changes and recovery invalidate previous sessions on their next request.
 - Legacy `/demo/*` routes are blocked. SQL helpers are in `dao/Database.java`; connection settings are in `config/DBConnect.java`. Some SQL remains in services and AdminServlet.
@@ -136,3 +136,26 @@ This audit fixed resubmission after refund rejection, repeated completed-refund 
 Duplicate-payment compensation uses `transactions.refund_scope=EXCESS_PAYMENT`; completing it does not reverse purchase rewards or reduce seller settlement. Purchase refunds use `PURCHASE`. Run the single `database/FreshoraDB.sql` before deploying this update. The script was tested both as a fresh install and a repeat upgrade on a separate audit database. Existing historical refund rows default to PURCHASE; investigate any historical duplicate-payment compensation separately before settlement.
 
 The regression run passed 109 Java assertions and 52 HTTP/SMTP checks on an isolated database, including `test/RefundLifecycleChecks.java`. These are targeted regression checks, not proof of every possible input or provider behavior. The application builds successfully. Real Gmail delivery and real VNPay sandbox payment/refund/IPN still require configured service credentials and a reachable callback URL. Do not mark those external acceptance items Done based only on fixtures.
+
+## Giao diện và dữ liệu tiếng Việt (14/10/2026)
+
+Giao diện các vai trò, thông báo xác thực, thư khôi phục mật khẩu, nhãn trạng thái và dữ liệu mẫu đã được Việt hóa. Tiền được định dạng theo vi_VN. Tên trường, mã trạng thái, đường dẫn, tài khoản đăng nhập và giao thức VNPay được giữ nguyên để bảo toàn tích hợp.
+
+Chạy file duy nhất `database/FreshoraDB.sql` cho cả cài mới và nâng cấp. Phần cập nhật tiếng Việt chỉ đổi các trường văn bản đã biết, không xóa dữ liệu và không thay đổi số tiền, số lượng hay khóa tham chiếu. Biên dịch và triển khai lại ứng dụng sau khi cập nhật. Nội dung tự nhập mới được giữ nguyên theo người nhập.
+
+
+## Model JavaBean (14/10/2026)
+
+Package `model` có lớp riêng cho 22 bảng và 2 view của database: `User`, `Address`, `Store`, `Listing`, `Variant`, `Batch`, `Order`, `SellerOrder`, `OrderItem`, `Transaction`, `Promotion`, `PromotionRedemption`, `Setting`, `Subscription`, `Review`, `ReviewReport`, `Notification`, `PasswordResetToken`, `StockMovement`, `IntegrationEvent`, `AuditLog`, `SchemaVersion`, `AvailableStock`, `ProductOffer`.
+
+Các lớp `...Details`/`OrderSummary` chứa kết quả truy vấn JOIN; `CartLine`, `CheckoutLine`, `CheckoutQuote`, `CheckoutSellerTotal`, `Wallet`, `MembershipProgress` chứa dữ liệu tổng hợp theo nghiệp vụ. `PromotionForm` nhận các trường từ biểu mẫu khuyến mãi. `SessionUser` tiếp tục chỉ lưu thông tin phiên đăng nhập. Model chứa dữ liệu; truy cập SQL ở DAO và xử lý nghiệp vụ ở service.
+
+`Database.one(User.class, connection, sql, args...)` và `Database.rows(User.class, connection, sql, args...)` ánh xạ tên cột SQL `snake_case` sang thuộc tính JavaBean `camelCase`. Cột không có thuộc tính tương ứng hoặc chuyển số làm mất độ chính xác sẽ báo lỗi. DAO/service/controller không còn dùng `Map<String, Object>` để đại diện đối tượng nghiệp vụ. Map vẫn dùng đúng mục đích cho tham số VNPay và bảng tra cứu theo mã đơn/khuyến mãi. JSP đọc các thuộc tính như `${order.paymentMethod}`.
+
+Chuyển đổi này không đổi schema hoặc dữ liệu database. Biên dịch và triển khai lại toàn bộ ứng dụng; trang checkout mở trước khi triển khai cần tải lại để nhận báo giá mới. `test/ModelMappingChecks.java` kiểm tra schema, kiểu số, NULL, Unicode và dấu vết địa chỉ checkout; chỉ chạy với database kiểm thử có tên chứa `Verify`. `TestRows` và `TestForms` trong thư mục test là tiện ích kiểm thử, không được đóng gói vào ứng dụng.
+
+## Yêu cầu hậu kiểm sản phẩm — 15/10/2026 (chưa triển khai)
+
+Theo góp ý của giảng viên: Admin có trách nhiệm hậu kiểm sản phẩm, không phải duyệt tất cả sản phẩm trước khi Seller đăng bán. Seller đăng sản phẩm đáp ứng kiểm tra dữ liệu tự động thì sản phẩm được công khai; Admin kiểm tra sau khi đăng, chủ động hoặc khi có báo cáo, và xử lý sản phẩm vi phạm kèm lý do. Cần sửa luồng chờ duyệt bắt buộc hiện tại trong code, SRS và SDS khi triển khai yêu cầu này.
+
+Đề xuất để thảo luận: dùng DRAFT (bản nháp), PUBLISHED (đã đăng), HIDDEN (Seller ẩn), SUSPENDED (Admin đình chỉ). Việc Seller sửa sản phẩm bị đình chỉ có cần Admin cho phép khôi phục hay không vẫn cần thống nhất; đây chưa phải quyết định đã được xác nhận. Commit hiện tại chỉ lưu yêu cầu, chưa thay đổi luồng duyệt sản phẩm.

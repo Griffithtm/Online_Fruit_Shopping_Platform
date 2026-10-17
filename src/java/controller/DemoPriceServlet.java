@@ -28,7 +28,7 @@ public class DemoPriceServlet extends HttpServlet {
             request.setAttribute("variants", new PriceDAO().findBySeller(DEMO_SELLER));
         } catch (SQLException e) {
             log("Cannot load demo prices", e);
-            request.setAttribute("message", "Database connection failed. Check configuration and Tomcat log.");
+            request.setAttribute("message", "Không thể kết nối cơ sở dữ liệu. Vui lòng kiểm tra cấu hình và nhật ký máy chủ.");
         }
         request.getRequestDispatcher("/WEB-INF/views/seller/demo-prices.jsp").forward(request, response);
     }
@@ -53,9 +53,9 @@ public class DemoPriceServlet extends HttpServlet {
                 throw new IllegalArgumentException();
             }
             boolean updated = new PriceDAO().updatePrice(id, price, DEMO_SELLER);
-            message = updated ? "Price updated successfully." : "Variant unavailable or not owned by this shop.";
+            message = updated ? "Đã cập nhật giá thành công." : "Biến thể không tồn tại hoặc không thuộc cửa hàng này.";
         } catch (IllegalArgumentException e) {
-            message = "Enter a price greater than 0, up to 16 integer digits and 2 decimal places.";
+            message = "Nhập giá lớn hơn 0, tối đa 16 chữ số phần nguyên và 2 chữ số thập phân.";
         } catch (SQLException e) {
             log("Cannot update demo price", e);
             message = "Update failed. Check the database and Tomcat log.";
