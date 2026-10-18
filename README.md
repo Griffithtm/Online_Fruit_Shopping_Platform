@@ -159,3 +159,10 @@ Chuyển đổi này không đổi schema hoặc dữ liệu database. Biên d�
 Theo góp ý của giảng viên: Admin có trách nhiệm hậu kiểm sản phẩm, không phải duyệt tất cả sản phẩm trước khi Seller đăng bán. Seller đăng sản phẩm đáp ứng kiểm tra dữ liệu tự động thì sản phẩm được công khai; Admin kiểm tra sau khi đăng, chủ động hoặc khi có báo cáo, và xử lý sản phẩm vi phạm kèm lý do. Cần sửa luồng chờ duyệt bắt buộc hiện tại trong code, SRS và SDS khi triển khai yêu cầu này.
 
 Đề xuất để thảo luận: dùng DRAFT (bản nháp), PUBLISHED (đã đăng), HIDDEN (Seller ẩn), SUSPENDED (Admin đình chỉ). Việc Seller sửa sản phẩm bị đình chỉ có cần Admin cho phép khôi phục hay không vẫn cần thống nhất; đây chưa phải quyết định đã được xác nhận. Commit hiện tại chỉ lưu yêu cầu, chưa thay đổi luồng duyệt sản phẩm.
+## Tích hợp nhánh Thanh — 16/10/2026
+
+Đã tích hợp các commit 8c5c984, 863ac73, a69dae8 và e6c0274: DAO tài khoản/địa chỉ, kiểm tra hồ sơ và email trùng, khóa địa chỉ theo đơn hàng, quy tắc địa chỉ mặc định, kiểm tra mật khẩu và nhật ký thay đổi. Phần tích hợp sử dụng JavaBean hiện tại và thông báo tiếng Việt; giữ lại quyền đăng ký Seller riêng và ghi chú hậu kiểm chưa triển khai.
+
+Trước khi chạy bản này, chạy toàn bộ `database/FreshoraDB.sql` để thêm `orders.delivery_address_id` và chỉ mục liên quan. Script nâng cấp không xóa dữ liệu. Không bỏ qua bước này: checkout và sổ địa chỉ mới sử dụng cột đó. Sau đó Clean and Build rồi triển khai lại ứng dụng.
+
+Đã kiểm thử trên database Verify riêng: bộ kiểm thử tài khoản mở rộng của Thành; các bộ giỏ hàng/tồn kho, Iteration 2, khuyến mãi/điểm, thanh toán/hoàn tiền, ánh xạ model; 52 kiểm tra HTTP/SMTP hiện có và 8 kiểm tra form tài khoản sau merge. Script `test/account_merge_checks.py` chạy trên server kiểm thử cổng 10109, tạo một tài khoản @test.invalid riêng cho mỗi lần chạy.

@@ -4,67 +4,79 @@
         <div class="two-column">
             <section class="panel">
                 <h2>Thông tin cá nhân</h2>
-                <form method="post" action="">
+                <c:set var="pf" value="${empty profileForm ? profile : profileForm}" />
+                <c:set var="pe" value="${empty profileForm ? null : fieldErrors}" />
+                <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="profile">
                     <label>Họ tên
-                        <input class="form-control" name="name" type="text" value="${fn:escapeXml(profile.fullName)}" required>
+                        <input class="form-control ${not empty pe.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(pf.fullName)}" required aria-describedby="profile-name-error" ${not empty pe.name ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <label>Điện thoại
-                        <input class="form-control" name="phone" type="tel" value="${fn:escapeXml(profile.phone)}" required>
+                    <c:if test="${not empty pe.name}"><div id="profile-name-error" class="invalid-feedback d-block"><c:out value="${pe.name}" /></div></c:if>
+                    <label>Thư điện tử
+                        <input class="form-control ${not empty pe.email ? 'is-invalid' : ''}" name="email" type="email" maxlength="254" value="${fn:escapeXml(pf.email)}" required aria-describedby="profile-email-error" ${not empty pe.email ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty pe.email}"><div id="profile-email-error" class="invalid-feedback d-block"><c:out value="${pe.email}" /></div></c:if>
+                    <label>Số điện thoại (không bắt buộc)
+                        <input class="form-control ${not empty pe.phone ? 'is-invalid' : ''}" name="phone" type="tel" maxlength="20" value="${fn:escapeXml(pf.phone)}" aria-describedby="profile-phone-error" ${not empty pe.phone ? 'aria-invalid="true"' : ''}>
+                    </label>
+                    <c:if test="${not empty pe.phone}"><div id="profile-phone-error" class="invalid-feedback d-block"><c:out value="${pe.phone}" /></div></c:if>
                     <button class="button">Lưu hồ sơ</button>
                 </form>
             </section>
             <section class="panel">
                 <h2>Đổi mật khẩu</h2>
-                <form method="post" action="">
+                <c:set var="we" value="${passwordFailed ? fieldErrors : null}" />
+                <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="password">
                     <label>Mật khẩu hiện tại
-                        <input class="form-control" name="old" type="password" value="" required>
+                        <input class="form-control ${not empty we.old ? 'is-invalid' : ''}" name="old" type="password" value="" required autocomplete="current-password" aria-describedby="password-old-error" ${not empty we.old ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty we.old}"><div id="password-old-error" class="invalid-feedback d-block"><c:out value="${we.old}" /></div></c:if>
                     <label>Mật khẩu mới
-                        <input class="form-control" name="password" type="password" value="" required>
+                        <input class="form-control ${not empty we.password ? 'is-invalid' : ''}" name="password" type="password" maxlength="64" value="" required autocomplete="new-password" aria-describedby="password-new-error" ${not empty we.password ? 'aria-invalid="true"' : ''}>
                     </label>
-                    <label>Xác nhận
-                        <input class="form-control" name="confirm" type="password" value="" required>
+                    <c:if test="${not empty we.password}"><div id="password-new-error" class="invalid-feedback d-block"><c:out value="${we.password}" /></div></c:if>
+                    <label>Xác nhận mật khẩu
+                        <input class="form-control ${not empty we.confirm ? 'is-invalid' : ''}" name="confirm" type="password" value="" required autocomplete="new-password" aria-describedby="password-confirm-error" ${not empty we.confirm ? 'aria-invalid="true"' : ''}>
                     </label>
+                    <c:if test="${not empty we.confirm}"><div id="password-confirm-error" class="invalid-feedback d-block"><c:out value="${we.confirm}" /></div></c:if>
                     <button class="button">Đổi mật khẩu</button>
                 </form>
             </section>
         </div>
+        <c:if test="${canManageAddresses}">
         <h2>Sổ địa chỉ</h2>
         <div class="productgrid">
             <c:forEach items="${addresses}" var="a">
+                <c:set var="fid" value="${a.id}" />
+                <c:set var="isNewForm" value="false" />
+                <c:set var="failed" value="${addressFormId == fid.toString()}" />
+                <c:set var="af" value="${failed ? addressForm : a}" />
+                <c:set var="fe" value="${failed ? fieldErrors : null}" />
                 <section class="panel">
-                    <form method="post" action="">
+                    <c:choose>
+                        <c:when test="${a.isDefault}">
+                            <p><span class="badge bg-success">Địa chỉ mặc định</span></p>
+                        </c:when>
+                        <c:otherwise>
+                            <form method="post" action="">
+                                <input type="hidden" name="csrf" value="${sessionScope.csrf}">
+                                <input type="hidden" name="action" value="defaultAddress">
+                                <input type="hidden" name="id" value="${a.id}">
+                                <button class="button">Đặt làm mặc định</button>
+                            </form>
+                        </c:otherwise>
+                    </c:choose>
+                    <form method="post" action="" novalidate>
                         <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                         <input type="hidden" name="action" value="saveAddress">
                         <input type="hidden" name="id" value="${a.id}">
-                        <label>Người nhận
-                            <input class="form-control" name="name" type="text" value="${fn:escapeXml(a.recipientName)}" required>
-                        </label>
-                        <label>Điện thoại
-                            <input class="form-control" name="phone" type="tel" value="${fn:escapeXml(a.phone)}" required>
-                        </label>
-                        <label>Địa chỉ
-                            <input class="form-control" name="line" type="text" value="${fn:escapeXml(a.addressLine)}" required>
-                        </label>
-                        <label>Phường/Xã
-                            <input class="form-control" name="ward" type="text" value="${fn:escapeXml(a.ward)}" required>
-                        </label>
-                        <label>Quận/Huyện
-                            <input class="form-control" name="district" type="text" value="${fn:escapeXml(a.district)}" required>
-                        </label>
-                        <label>Tỉnh/Thành phố
-                            <input class="form-control" name="city" type="text" value="${fn:escapeXml(a.city)}" required>
-                        </label>
-                        <label>
-                            <input type="checkbox" name="primary" ${a.isDefault ? 'checked' : ''}> Mặc định</label>
+                        <%@ include file="/WEB-INF/views/customer/address-form.jspf" %>
                         <button class="button">Cập nhật</button>
                     </form>
-                    <form method="post" action="">
+                    <form method="post" action="" data-confirm="${fn:escapeXml(deleteAddressConfirm)}">
                         <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                         <input type="hidden" name="action" value="deleteAddress">
                         <input type="hidden" name="id" value="${a.id}">
@@ -74,31 +86,32 @@
             </c:forEach>
             <section class="panel">
                 <h3>Thêm địa chỉ</h3>
-                <form method="post" action="">
+                <c:set var="fid" value="new" />
+                <c:set var="isNewForm" value="true" />
+                <c:set var="failed" value="${addressFormId == 'new'}" />
+                <c:set var="af" value="${failed ? addressForm : null}" />
+                <c:set var="fe" value="${failed ? fieldErrors : null}" />
+                <form method="post" action="" novalidate>
                     <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                     <input type="hidden" name="action" value="saveAddress">
-                    <label>Người nhận
-                        <input class="form-control" name="name" type="text" value="" required>
-                    </label>
-                    <label>Điện thoại
-                        <input class="form-control" name="phone" type="text" value="" required>
-                    </label>
-                    <label>Địa chỉ
-                        <input class="form-control" name="line" type="text" value="" required>
-                    </label>
-                    <label>Phường/Xã
-                        <input class="form-control" name="ward" type="text" value="" required>
-                    </label>
-                    <label>Quận/Huyện
-                        <input class="form-control" name="district" type="text" value="" required>
-                    </label>
-                    <label>Tỉnh/Thành phố
-                        <input class="form-control" name="city" type="text" value="" required>
-                    </label>
-                    <label>
-                        <input type="checkbox" name="primary"> Mặc định</label>
+                    <%@ include file="/WEB-INF/views/customer/address-form.jspf" %>
                     <button class="button">Thêm địa chỉ</button>
                 </form>
             </section>
         </div>
+        <script>
+            // "Other" shows the free-text province box; without JavaScript the box simply stays visible.
+            document.querySelectorAll('[data-city-select]').forEach(function (select) {
+                var other = select.closest('form').querySelector('[data-city-other]');
+                var sync = function () { other.hidden = select.value !== '__other'; };
+                select.addEventListener('change', sync);
+                sync();
+            });
+            document.querySelectorAll('form[data-confirm]').forEach(function (form) {
+                form.addEventListener('submit', function (e) {
+                    if (!window.confirm(form.getAttribute('data-confirm'))) { e.preventDefault(); }
+                });
+            });
+        </script>
+        </c:if>
         <%@ include file="/WEB-INF/views/footer.jsp" %>

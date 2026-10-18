@@ -4,6 +4,9 @@ package model;
  * Database entity: Order.
  */
 public class Order {
+    private Long deliveryAddressId;
+    public Long getDeliveryAddressId() { return deliveryAddressId; }
+    public void setDeliveryAddressId(Long value) { deliveryAddressId = value; }
 
     private Long id;
     private String orderCode;
