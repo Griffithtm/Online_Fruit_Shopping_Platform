@@ -12,6 +12,8 @@ import java.util.*;
  * Every order mutation locks the parent order before seller orders and batches.
  */
 public class FulfillmentService {
+    private final NotificationService notifications =
+            new NotificationService();
 
     public static int policy(Connection c, String key, int fallback) throws Exception {
         CountResult p = Database.one(CountResult.class, c, "SELECT TRY_CONVERT(int,value) AS n FROM settings WHERE type='POLICY' AND name=? AND status='ACTIVE'", key);
@@ -172,6 +174,21 @@ public class FulfillmentService {
                 }
                 Database.update(c, "INSERT audit_logs(actor_id,entity_type,entity_id,action,old_value,new_value,note) VALUES(?,'SellerOrder',?,?,?,?,?)", actor, sid, action, old, next, detail);
                 Database.update(c, "INSERT notifications(user_id,event_type,title,content,link_url,dedup_key) VALUES(?,'ORDER_UPDATE',N'Đơn hàng đã cập nhật',?,'/orders',?)", o.getCustomerId(), "Đơn hàng cửa hàng " + sid + ": " + util.Vietnamese.label(next), "seller-order:" + sid + ":" + next);
+                notifications.create(c, FulfillmentService.id(o.getCustomerId()),
+                        "ORDER_UPDATE", "Đơn hàng đã cập nhật",
+                        "Đơn hàng cửa hàng " + sid + ": " + util.Vietnamese.label(next),
+                        "/orders", false, "seller-order:" + sid + ":" + next);
+                if ("CANCELLED".equals(next) && customer) {
+                    notifications.create(c, FulfillmentService.id(so.getOwnerId()),
+                            "ORDER_CANCELLED", "Khách đã hủy đơn hàng",
+                            "Khách hàng đã hủy đơn hàng cửa hàng #" + sid + ".",
+                            "/seller/orders", false, "seller-cancel:" + sid);
+                }
+                if ("ASSIGNED".equals(next) && courier != null) {
+                    notifications.create(c, courier, "DELIVERY_ASSIGNED",
+                            "Có đơn hàng cần giao", "Bạn đã được phân công giao đơn hàng #" + sid + ".",
+                            "/delivery", false, "delivery-assigned:" + sid);
+                }
                 if (next.equals("DELIVERED")) {
                     LoyaltyService.earn(c, FulfillmentService.id(o.getCustomerId()), sid, FulfillmentService.money(so.getSubtotal()).subtract(FulfillmentService.money(so.getDiscountAmount())).subtract(FulfillmentService.money(so.getPointsDiscount())));
                     if ("COD".equals(o.getPaymentMethod())) {

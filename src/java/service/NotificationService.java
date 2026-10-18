@@ -22,7 +22,7 @@ public class NotificationService {
     private Connection getConnection() throws SQLException {
         return new DBConnect().getConnection();
     }
-
+    
     public long create(Connection connection,
                        long recipientId,
                        String eventType,

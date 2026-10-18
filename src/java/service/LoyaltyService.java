@@ -96,7 +96,10 @@ public class LoyaltyService {
         Object target = progress.getTierId();
         if (target != null && !Objects.equals(user.getMembershipTierId(), target)) {
             Database.update(c, "UPDATE users SET membership_tier_id=? WHERE id=?", target, uid);
-            Database.update(c, "INSERT notifications(user_id,event_type,title,content,link_url,dedup_key) VALUES(?,'MEMBERSHIP_UPDATE',N'Hạng thành viên đã cập nhật',N'Hạng thành viên của bạn đã thay đổi. Hãy xem quyền lợi và tiến độ tích lũy.','/wallet',?)", uid, "membership:" + uid + ":" + UUID.randomUUID());
+            new NotificationService().create(c, uid, "MEMBERSHIP_UPDATE",
+                    "Hạng thành viên đã cập nhật",
+                    "Hạng thành viên của bạn đã thay đổi. Hãy xem quyền lợi và tiến độ tích lũy.",
+                    "/wallet", false, "membership:" + uid + ":" + UUID.randomUUID());
         }
     }
 

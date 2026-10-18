@@ -13,6 +13,9 @@ import java.util.*;
  */
 public class CheckoutService {
 
+    private final NotificationService notifications
+            = new NotificationService();
+
     public CheckoutQuote quote(long uid, long addressId) throws Exception {
         return quote(uid, addressId, "", 0, "COD");
     }
@@ -212,6 +215,24 @@ public class CheckoutService {
                 LoyaltyService.redeem(c, uid, oid, points);
                 if (method.equals("COD")) {
                     Database.update(c, "INSERT transactions(type,user_id,order_id,method,amount,status,idempotency_key) VALUES('COD',?,?,'COD',?,'PENDING',?)", uid, oid, q.getTotal(), "cod:" + oid);
+                }
+                notifications.create(c, uid, "ORDER_PLACED",
+                        method.equals("COD") ? "Đặt hàng thành công" : "Đơn hàng chờ thanh toán",
+                        method.equals("COD")
+                        ? "Đơn hàng FR" + oid + " đã được xác nhận, thanh toán khi nhận hàng."
+                        : "Đơn hàng FR" + oid + " đang chờ hoàn tất thanh toán.",
+                        "/orders", false, "order-placed:" + oid);
+                if (method.equals("COD")) {
+                    // Only confirmed orders may enter the seller's fulfillment queue.
+                    for (SellerOrderDetails so : Database.rows(SellerOrderDetails.class, c,
+                            "SELECT so.id,s.owner_id FROM seller_orders so "
+                            + "JOIN stores s ON s.id=so.store_id "
+                            + "WHERE so.order_id=? AND so.status='NEW'", oid)) {
+                        long sellerId = FulfillmentService.id(so.getOwnerId());
+                        notifications.create(c, sellerId, "NEW_ORDER", "Đơn hàng mới",
+                                "Cửa hàng của bạn có đơn hàng FR" + oid + " cần xử lý.",
+                                "/seller/orders", false, "new-order:" + so.getId());
+                    }
                 }
                 c.commit();
                 return oid;

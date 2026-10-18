@@ -84,10 +84,35 @@ public class PaymentService {
                     return "99";
                 }
                 Database.update(c, "UPDATE transactions SET status=?,gateway_ref=?,reconciled=1,updated_at=SYSUTCDATETIME() WHERE id=?", success ? "PAID" : Set.of("01", "04", "05", "06", "07").contains(p.getOrDefault("vnp_TransactionStatus", "")) ? "INITIATED" : "FAILED", success ? gatewayRef : null, ref);
+                String nextPaymentStatus = success ? "PAID"
+                        : Set.of("01", "04", "05", "06", "07").contains(
+                                p.getOrDefault("vnp_TransactionStatus", "")) ? "INITIATED" : "FAILED";
+                Database.update(c, "UPDATE transactions SET status=?,gateway_ref=?,reconciled=1,updated_at=SYSUTCDATETIME() WHERE id=?",
+                        nextPaymentStatus, success ? gatewayRef : null, ref);
+                NotificationService notifications = new NotificationService();
                 if (success) {
                     if ("AWAITING_PAYMENT".equals(o.getStatus()) && o.getExpired().intValue() == 0) {
                         Database.update(c, "UPDATE orders SET status='CONFIRMED',updated_at=SYSUTCDATETIME() WHERE id=?", o.getId());
+                        notifications.create(c, FulfillmentService.id(o.getCustomerId()),
+                                "PAYMENT_SUCCESS", "Thanh toán thành công",
+                                "Đơn hàng FR" + o.getId() + " đã thanh toán thành công.",
+                                "/orders", false, "payment-success:" + ref);
+                        // Notify sellers only when the order is valid and confirmed.
+                        for (SellerOrderDetails so : Database.rows(SellerOrderDetails.class, c,
+                                "SELECT so.id,s.owner_id FROM seller_orders so "
+                                + "JOIN stores s ON s.id=so.store_id "
+                                + "WHERE so.order_id=? AND so.status='NEW'", o.getId())) {
+                            notifications.create(c, FulfillmentService.id(so.getOwnerId()),
+                                    "NEW_ORDER", "Đơn hàng mới",
+                                    "Cửa hàng của bạn có đơn hàng FR" + o.getId() + " cần xử lý.",
+                                    "/seller/orders", false, "new-order:" + so.getId());
+                        }
                     } else {
+                        notifications.create(c, FulfillmentService.id(o.getCustomerId()),
+                                "PAYMENT_RECEIVED_LATE", "Khoản thanh toán đang xử lý hoàn tiền",
+                                "Đã ghi nhận khoản thanh toán cho đơn FR" + o.getId()
+                                + ", nhưng đơn không còn đủ điều kiện xác nhận. Vui lòng theo dõi hoàn tiền.",
+                                "/refunds", false, "payment-late:" + ref);
                         if ("AWAITING_PAYMENT".equals(o.getStatus())) {
                             expire(c, o);
                         }
@@ -96,16 +121,24 @@ public class PaymentService {
                             FinanceService.requestAutomatic(c, o, so, ref, "AWAITING_PAYMENT".equals(o.getStatus()) || "EXPIRED".equals(o.getStatus()) || "CANCELLED".equals(o.getStatus()) ? "Thanh toán đến sau khi đơn hết hạn hoặc bị hủy" : "Thanh toán trùng cho đơn đã xác nhận", Set.of("CONFIRMED", "COMPLETED").contains(o.getStatus()));
                         }
                     }
+                } else if ("FAILED".equals(nextPaymentStatus)) {
+                    notifications.create(c, FulfillmentService.id(o.getCustomerId()),
+                            "PAYMENT_FAILED", "Thanh toán không thành công",
+                            "Thanh toán đơn FR" + o.getId()
+                            + " chưa thành công. Vui lòng kiểm tra và thử lại nếu đơn còn hiệu lực.",
+                            "/orders", false, "payment-failed:" + ref);
                 }
-                Database.update(c, "INSERT integration_events(provider,event_key,event_type,status) VALUES('VNPAY',?,'PAYMENT_IPN','PROCESSED')", ref + ":" + gatewayRef + ":" + p.get("vnp_ResponseCode") + ":" + p.get("vnp_TransactionStatus"));
-                c.commit();
-                return "00";
-            } catch (Exception e) {
+                    Database.update(c, "INSERT integration_events(provider,event_key,event_type,status) VALUES('VNPAY',?,'PAYMENT_IPN','PROCESSED')", ref + ":" + gatewayRef + ":" + p.get("vnp_ResponseCode") + ":" + p.get("vnp_TransactionStatus"));
+                    c.commit();
+                    return "00";
+                }catch (Exception e) {
                 c.rollback();
                 throw e;
             }
+            }
         }
-    }
+
+    
 
     public static void expire(Connection c, Order o) throws Exception {
         Database.update(c, "UPDATE orders SET status='EXPIRED',updated_at=SYSUTCDATETIME() WHERE id=?", o.getId());
@@ -115,6 +148,10 @@ public class PaymentService {
         Database.update(c, "UPDATE seller_orders SET status='CANCELLED' WHERE order_id=?", o.getId());
         Database.update(c, "UPDATE transactions SET status='EXPIRED' WHERE order_id=? AND type='PAYMENT' AND status='INITIATED'", o.getId());
         BenefitsService.returnAll(c, o);
+        new NotificationService().create(c, FulfillmentService.id(o.getCustomerId()),
+                "ORDER_EXPIRED", "Đơn hàng hết hạn thanh toán",
+                "Đơn hàng FR" + o.getId() + " đã hết thời hạn thanh toán.",
+                "/orders", false, "order-expired:" + o.getId());
     }
 
     public void expireDue() throws Exception {

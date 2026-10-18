@@ -57,6 +57,13 @@ public class FinanceService {
                     throw new IllegalArgumentException("Chưa thu được tiền để hoàn trả.");
                 }
                 boolean created = requestAutomatic(c, o, so, FulfillmentService.id(payment.getId()), reason, false);
+                if (created) {
+                    // A duplicate requestAutomatic() call does not generate another alert.
+                    new NotificationService().create(c, uid, "REFUND_REQUESTED",
+                            "Đã tiếp nhận yêu cầu hoàn tiền",
+                            "Yêu cầu hoàn tiền cho đơn cửa hàng #" + sid + " đang chờ xử lý.",
+                            "/refunds", false, "refund-requested:" + sid + ":" + UUID.randomUUID());
+                }
                 if (created && "DELIVERED".equals(so.getStatus())) {
                     Database.update(c, "UPDATE seller_orders SET dispute_status='OPEN',dispute_note=? WHERE id=?", reason, sid);
                 }
@@ -94,6 +101,13 @@ public class FinanceService {
                         throw new IllegalArgumentException("Yêu cầu hoàn tiền đã được xét duyệt.");
                     }
                     Database.update(c, "UPDATE transactions SET status=?,reason=?,updated_at=SYSUTCDATETIME() WHERE id=?", action.equals("approve") ? "APPROVED" : "REJECTED", reason, tid);
+                    String result = action.equals("approve") ? "APPROVED" : "REJECTED";
+                    new NotificationService().create(c, FulfillmentService.id(t.getUserId()),
+                            action.equals("approve") ? "REFUND_APPROVED" : "REFUND_REJECTED",
+                            action.equals("approve") ? "Yêu cầu hoàn tiền đã được duyệt" : "Yêu cầu hoàn tiền bị từ chối",
+                            "Yêu cầu hoàn tiền #" + tid + " có kết quả: "
+                            + (action.equals("approve") ? "Đã duyệt." : "Từ chối. Vui lòng xem chi tiết."),
+                            "/refunds", false, "refund-decision:" + tid + ":" + result);
                     if (!"EXCESS_PAYMENT".equals(t.getRefundScope())) {
                         Database.update(c, "UPDATE seller_orders SET dispute_status='RESOLVED',dispute_decision=? WHERE id=?", reason, t.getSellerOrderId());
                     }
@@ -128,7 +142,10 @@ public class FinanceService {
             }
             LoyaltyService.tier(c, FulfillmentService.id(t.getUserId()));
         }
-        Database.update(c, "INSERT notifications(user_id,event_type,title,content,link_url,dedup_key) VALUES(?,'REFUND',N'Hoàn tiền thành công',N'Khoản hoàn tiền của bạn đã được xác nhận.','/refunds',?)", t.getUserId(), "refund-complete:" + t.getId());
+        new NotificationService().create(c, FulfillmentService.id(t.getUserId()),
+                "REFUND", "Hoàn tiền thành công",
+                "Khoản hoàn tiền của bạn đã được xác nhận.",
+                "/refunds", false, "refund-complete:" + t.getId());
     }
 
     public void settle(long admin, long sid) throws Exception {
