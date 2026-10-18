@@ -1,0 +1,15 @@
+<%@ page pageEncoding="UTF-8" %><%@ include file="/WEB-INF/views/header.jsp" %>
+<h1>Khuyến mãi</h1><p>Lịch sử dụng giờ Việt Nam (UTC+7). Số tiền được tính bằng đồng.</p>
+<form method="post" class="panel"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><input type="hidden" name="action" value="save">
+    <label>Mã khuyến mãi (để trống khi tạo mới)<input name="id" type="number" min="1" class="form-control"></label>
+    <label>Tên<input name="name" maxlength="150" required class="form-control"></label>
+    <c:choose><c:when test="${sessionScope.user.role == 'ADMIN'}"><label>Mã giảm giá<input name="code" maxlength="30" required class="form-control"></label></c:when><c:otherwise><label>Mã tin đăng áp dụng (phân cách bằng dấu phẩy)<input name="listings" required class="form-control"></label></c:otherwise></c:choose>
+            <label>Loại giảm giá<select name="discountType" class="form-control"><option value="PERCENT">Phần trăm</option><option value="AMOUNT">Số tiền cố định</option></select></label>
+            <label>Mức giảm giá<input type="number" step="0.01" min="0.01" name="value" required class="form-control"></label>
+            <label>Giá trị đơn tối thiểu<input type="number" name="minimum" min="0" value="0" required class="form-control"></label>
+            <label>Tổng ngân sách<input type="number" name="budget" min="1" required class="form-control"></label>
+            <label>Tổng lượt sử dụng<input type="number" name="limit" min="1" max="10000" required class="form-control"></label>
+            <label>Lượt sử dụng mỗi khách hàng<input type="number" name="perCustomer" min="1" max="10000" value="1" required class="form-control"></label>
+            <label>Bắt đầu<input type="datetime-local" name="start" required class="form-control"></label><label>Kết thúc<input type="datetime-local" name="end" required class="form-control"></label><button class="button">Lưu bản nháp</button></form>
+<c:forEach items="${promotions}" var="p"><section class="panel"><h2>#${p.id} <c:out value="${p.name}"/></h2><p><c:out value="${p.code}"/> · <c:out value="${vi:label(p.status)}"/> · <c:out value="${vi:label(p.discountType)}"/> ${p.discountValue}</p><p>Lượt sử dụng: ${p.redemptions} · Ngân sách đã dùng: <fmt:formatNumber value="${p.budgetUsed}"/> / <fmt:formatNumber value="${p.budgetLimit}"/> đ</p><form method="post"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><input type="hidden" name="id" value="${p.id}"><input type="hidden" name="action" value="state"><select name="state"><option value="SCHEDULED">Công bố / lên lịch</option><option value="PAUSED">Tạm dừng</option><option value="ENDED">Kết thúc</option></select><button class="button">Cập nhật trạng thái</button></form><h3>Lịch sử sử dụng</h3><c:forEach items="${p.history}" var="h"><p><c:out value="${h.orderCode}"/> · <fmt:formatNumber value="${h.discountAmount}"/> đ · <c:out value="${vi:label(h.status)}"/> · <c:out value="${h.createdAt}"/> giờ quốc tế</p></c:forEach></section></c:forEach>
+        <%@ include file="/WEB-INF/views/footer.jsp" %>

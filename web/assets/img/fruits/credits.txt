@@ -1,0 +1,10 @@
+Fruit photographs from Pexels (Pexels License).
+fruit-basket.jpg: https://www.pexels.com/photo/8540979/
+fruit-orchard.jpg: https://www.pexels.com/photo/635705/
+fresh-fruit.jpg: https://www.pexels.com/photo/12597141/
+oranges.jpg: https://www.pexels.com/photo/7543100/
+apples.jpg: https://www.pexels.com/photo/2487443/
+mangoes.jpg: https://www.pexels.com/photo/5640033/
+grapes.jpg: https://www.pexels.com/photo/3987386/
+pomelo.jpg: https://www.pexels.com/photo/18560667/
+watermelon.jpg: https://www.pexels.com/photo/6604313/

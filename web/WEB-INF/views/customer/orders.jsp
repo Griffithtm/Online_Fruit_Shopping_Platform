@@ -1,0 +1,14 @@
+<%@ page pageEncoding="UTF-8" %>
+<%@ include file="/WEB-INF/views/header.jsp" %>
+<h1>Đơn hàng của tôi</h1><p><a href="${pageContext.request.contextPath}/refunds">Yêu cầu hoàn tiền</a> · <a href="${pageContext.request.contextPath}/wallet">Điểm thưởng</a></p><label>Tìm đơn hàng<input id="orderSearch" class="form-control" placeholder="Mã đơn, sản phẩm hoặc cửa hàng"></label><script>document.addEventListener("DOMContentLoaded", () => {document.getElementById("orderSearch").addEventListener("input", e => {document.querySelectorAll("section.panel").forEach(p => p.hidden = !p.textContent.toLowerCase().includes(e.target.value.toLowerCase())); }); });</script>
+<c:if test="${empty orders}"><p>Bạn chưa có đơn hàng nào.</p></c:if>
+<c:forEach items="${orders}" var="o"><section class="panel">
+        <h2><c:out value="${o.orderCode}"/></h2><p>Trạng thái: <c:out value="${vi:label(o.status)}"/> · Phương thức thanh toán: <c:out value="${vi:label(o.paymentMethod)}"/></p>
+        <p><c:out value="${o.recipientName} - ${o.deliveryAddress}"/></p>
+        <c:forEach items="${items}" var="i"><c:if test="${i.orderId == o.id}"><p><c:out value="${i.storeName} - ${i.title}"/> × ${i.quantity} · <fmt:formatNumber value="${i.unitPrice * i.quantity}"/> đ · <c:out value="${vi:label(i.sellerStatus)}"/> · Đơn cửa hàng #${i.sellerOrderId}</p><p><c:out value="${i.rejectionReason}"/></p><c:if test="${i.sellerStatus == 'NEW' || i.sellerStatus == 'ACCEPTED'}"><form method="post"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><input type="hidden" name="action" value="cancel"><input type="hidden" name="id" value="${i.sellerOrderId}"><button class="button">Hủy đơn của cửa hàng này</button></form></c:if></c:if></c:forEach>
+        <p>Phí giao hàng: <fmt:formatNumber value="${o.deliveryFee}"/> đ</p><p>Số tiền phải trả sau khi hủy đơn cửa hàng: <fmt:formatNumber value="${o.currentPayable}"/> đ</p><strong>Tổng tiền ban đầu: <fmt:formatNumber value="${o.payableAmount}"/> đ</strong>
+        <c:if test="${o.status == 'AWAITING_PAYMENT'}"><form method="post" action="${pageContext.request.contextPath}/payment/start"><input type="hidden" name="csrf" value="${sessionScope.csrf}"><input type="hidden" name="id" value="${o.id}"><button class="button">Thanh toán / thử lại với VNPay</button></form><p>Hạn thanh toán: <c:out value="${o.paymentExpiresAt}"/> giờ quốc tế</p></c:if>
+        <details><summary>Lịch sử thử thanh toán</summary><c:forEach items="${payments}" var="p"><c:if test="${p.orderId == o.id}"><p>#${p.id} · <c:out value="${vi:label(p.method)}"/> · <fmt:formatNumber value="${p.amount}"/> đ · <c:out value="${vi:label(p.status)}"/> · <c:out value="${p.createdAt}"/> giờ quốc tế</p></c:if></c:forEach></details><p>Trạng thái thanh toán: <c:out value="${vi:label(o.paymentStatus)}"/> · Dự kiến giao hàng: <c:out value="${o.estimatedDeliveryAt}"/> giờ quốc tế</p>
+
+            </section></c:forEach>
+<%@ include file="/WEB-INF/views/footer.jsp" %>

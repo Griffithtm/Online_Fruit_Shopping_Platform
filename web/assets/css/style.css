@@ -18,7 +18,7 @@ html {
   scroll-behavior: smooth;
 }
 body {
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   color: #444;
   background: #fff;
   overflow-x: hidden;
@@ -239,7 +239,7 @@ section {
   align-items: center;
   gap: 9px;
   cursor: pointer;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .btn-red:hover {
   transform: translateY(-3px);
@@ -674,7 +674,7 @@ section {
   font-weight: 700;
   color: var(--dark);
   margin-bottom: 2px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .fti p {
   font-size: 0.8rem;
@@ -699,7 +699,7 @@ section {
   cursor: pointer;
   transition: 0.3s;
   margin: 3px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .filtbtn.active,
 .filtbtn:hover {
@@ -1375,7 +1375,7 @@ section {
   font-size: 0.88rem;
   color: var(--dark);
   margin-bottom: 1px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .tesrl {
   font-size: 0.73rem;
@@ -1410,7 +1410,7 @@ section {
   border: 2px solid #eee;
   border-radius: 9px;
   padding: 11px 15px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   font-size: 0.88rem;
   outline: none;
   transition: 0.3s;
@@ -1587,7 +1587,7 @@ section {
   padding: 14px 22px;
   font-size: 0.9rem;
   outline: none;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   color: #333;
 }
 .nlbtn {
@@ -1602,7 +1602,7 @@ section {
   cursor: pointer;
   white-space: nowrap;
   transition: 0.3s;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .nlbtn:hover {
   transform: scale(1.05);
@@ -1667,7 +1667,7 @@ section {
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 1px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .ctinfo span {
   color: #fff;
@@ -1744,7 +1744,7 @@ footer {
   padding-bottom: 9px;
   border-bottom: 2px solid var(--primary);
   display: inline-block;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .flinks li {
   list-style: none;
@@ -1953,7 +1953,7 @@ footer {
   padding: 17px 24px;
   color: #fff;
   font-size: 1.05rem;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   outline: none;
 }
 .sovinput input::placeholder {
@@ -1990,7 +1990,7 @@ footer {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
 }
 .sovcat img {
   width: 26px;
@@ -2219,7 +2219,7 @@ footer {
   font-size: 0.96rem;
   font-weight: 700;
   cursor: pointer;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   transition: 0.3s;
   display: flex;
   align-items: center;
@@ -2305,7 +2305,7 @@ footer {
   padding: 7px 20px;
   cursor: pointer;
   font-size: 0.83rem;
-  font-family: "Poppins", sans-serif;
+  font-family: "Be Vietnam Pro", sans-serif;
   transition: 0.3s;
 }
 .gpnav button:hover {

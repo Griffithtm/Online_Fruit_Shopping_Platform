@@ -1,8 +1,9 @@
 package filter;
 
+import model.*;
+
 import config.DBConnect;
 import dao.Database;
-import model.SessionUser;
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebFilter;
 import jakarta.servlet.http.*;
@@ -34,23 +35,23 @@ public class SecurityFilter implements Filter {
         SessionUser u = (SessionUser) session.getAttribute("user");
         if (u != null) {
             try (Connection c = new DBConnect().getConnection()) {
-                Map<String, Object> db = Database.one(c, "SELECT id,full_name,role,status FROM users WHERE id=?", u.getId());
-                if (db == null || !"ACTIVE".equals(db.get("status"))) {
+                User db = Database.one(User.class, c, "SELECT id,full_name,role,status,password_hash FROM users WHERE id=?", u.getId());
+                if (db == null || (!"ACTIVE".equals(db.getStatus()) || !u.credentialsMatch(db.getPasswordHash()))) {
                     session.removeAttribute("user");
                     u = null;
                 } else {
-                    u = new SessionUser(u.getId(), (String) db.get("full_name"), (String) db.get("role"));
+                    u = new SessionUser(u.getId(), db.getFullName(), db.getRole(),db.getPasswordHash());
                     session.setAttribute("user", u);
                 }
             } catch (Exception e) {
-                throw new ServletException("Database unavailable", e);
+                throw new ServletException("Cơ sở dữ liệu tạm thời không khả dụng", e);
             }
         }
         if (path.startsWith("/demo/")) {
             s.sendError(404);
             return;
         }
-        boolean privatePath = path.startsWith("/account") || path.startsWith("/seller") || path.startsWith("/admin") || path.startsWith("/cart");
+        boolean privatePath = path.startsWith("/account") || path.startsWith("/seller") || path.startsWith("/admin") || path.startsWith("/cart") || path.equals("/checkout") || path.equals("/orders") || path.equals("/wallet") || path.equals("/refunds") || path.equals("/delivery") || path.equals("/payment/start");
         if (privatePath && u == null) {
             s.sendRedirect(r.getContextPath() + "/login");
             return;
@@ -59,12 +60,13 @@ public class SecurityFilter implements Filter {
             s.sendError(403);
             return;
         }
-        if (path.startsWith("/cart") && u != null && !Set.of("CUSTOMER", "SELLER").contains(u.getRole())) {
+        if(path.equals("/delivery") && (u==null || !"DELIVERY_STAFF".equals(u.getRole()))){s.sendError(403);return;}
+        if ((path.startsWith("/cart") || path.equals("/checkout") || path.equals("/orders") || path.equals("/wallet") || path.equals("/refunds") || path.equals("/payment/start")) && u != null && !Set.of("CUSTOMER", "SELLER").contains(u.getRole())) {
             s.sendError(403);
             return;
         }
         if ("POST".equals(r.getMethod()) && !Objects.equals(session.getAttribute("csrf"), r.getParameter("csrf"))) {
-            s.sendError(403, "Invalid form token. Reload the page.");
+            s.sendError(403, "Phiên gửi biểu mẫu không hợp lệ. Vui lòng tải lại trang.");
             return;
         }
         chain.doFilter(r, s);

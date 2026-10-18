@@ -19,12 +19,13 @@ public abstract class BaseServlet extends HttpServlet {
                 "auth/auth";
             case "seller" ->
                 "seller/seller";
-            case "account", "cart", "compare", "product", "products", "shops" ->
+            case "checkout", "orders", "account", "cart", "compare", "product", "products", "shops" ->
                 "customer/" + name;
+            case "fulfillment", "promotions", "wallet", "refunds", "payment" -> name;
             case "home" ->
                 "home";
             default ->
-                throw new IllegalArgumentException("Unknown view: " + name);
+                throw new IllegalArgumentException("Trang không hợp lệ: " + name);
         };
         r.getRequestDispatcher("/WEB-INF/views/" + path + ".jsp").forward(r, s);
     }
@@ -35,6 +36,6 @@ public abstract class BaseServlet extends HttpServlet {
 
     protected String error(Exception e) {
         getServletContext().log("Freshora request failed", e);
-        return e instanceof IllegalArgumentException ? e.getMessage() : "Unable to save. Check for duplicate or invalid data and try again.";
+        return e instanceof IllegalArgumentException && e.getMessage() != null && e.getMessage().matches("(?s).*[À-ỹ].*") ? e.getMessage() : "Không thể lưu dữ liệu. Kiểm tra dữ liệu trùng, ràng buộc hoặc thử lại.";
     }
 }

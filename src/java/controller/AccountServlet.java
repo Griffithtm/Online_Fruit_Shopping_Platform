@@ -28,10 +28,13 @@ public class AccountServlet extends BaseServlet {
                 service.profile(uid(r), r.getParameter("name"), r.getParameter("phone"));
             } else if ("password".equals(a)) {
                 service.password(uid(r), r.getParameter("old"), r.getParameter("password"), r.getParameter("confirm"));
+                r.getSession().invalidate();
+                redirect(r,s,"/login?success=1");
+                return;
             } else if (java.util.Set.of("saveAddress", "deleteAddress", "defaultAddress").contains(a)) {
                 service.address(uid(r), a, r.getParameter("id"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("line"), r.getParameter("ward"), r.getParameter("district"), r.getParameter("city"), "on".equals(r.getParameter("primary")));
             } else {
-                throw new IllegalArgumentException("Invalid action.");
+                throw new IllegalArgumentException("Thao tác không hợp lệ.");
             }
             redirect(r, s, "/account?saved=1");
         } catch (Exception e) {

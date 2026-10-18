@@ -32,7 +32,7 @@ public class AuthServlet extends BaseServlet {
             if (p.equals("/login")) {
                 Long next = (Long) r.getSession().getAttribute("nextLogin");
                 if (next != null && next > System.currentTimeMillis()) {
-                    throw new IllegalArgumentException("Please wait a few seconds before trying again.");
+                    throw new IllegalArgumentException("Vui lòng đợi vài giây trước khi thử lại.");
                 }
                 r.getSession().setAttribute("nextLogin", System.currentTimeMillis() + 1500);
                 SessionUser user = service.login(r.getParameter("email"), r.getParameter("password"));
@@ -47,11 +47,21 @@ public class AuthServlet extends BaseServlet {
                 service.register(p.endsWith("seller") ? "SELLER" : "CUSTOMER", r.getParameter("email"), r.getParameter("password"), r.getParameter("confirm"), r.getParameter("name"), r.getParameter("phone"), r.getParameter("store"));
             } else if (p.equals("/forgot")) {
                 Long last = (Long) r.getSession().getAttribute("lastRecovery");
-                if (last == null || last < System.currentTimeMillis() - 60000) {
-                    service.forgot(r.getParameter("email"));
-                    r.getSession().setAttribute("lastRecovery", System.currentTimeMillis());
+                long now = System.currentTimeMillis();
+                if (last != null && last > now - 60000) {
+                    throw new IllegalArgumentException("Vui lòng đợi " + ((last + 60000 - now) / 1000 + 1) + " giây trước khi yêu cầu lại.");
                 }
-                r.setAttribute("message", "If the email exists, recovery instructions will be generated. Local mode saves the email in the server outbox.");
+                String devToken = service.forgot(r.getParameter("email"), publicBaseUrl(r));
+                r.getSession().setAttribute("lastRecovery", now);
+                if (devToken != null && isLocalRequest(r)) {
+                    redirect(r, s, "/reset?token=" + devToken);
+                    return;
+                }
+                String msg = "Nếu địa chỉ thư điện tử tồn tại, hướng dẫn khôi phục mật khẩu đã được gửi. Vui lòng kiểm tra hộp thư đến và thư rác.";
+                if (devToken != null) {
+                    msg += " [Chế độ phát triển: thư được lưu trong thư mục freshora-private-outbox của Tomcat.]";
+                }
+                r.setAttribute("message", msg);
                 doGet(r, s);
                 return;
             } else if (p.equals("/reset")) {
@@ -61,6 +71,22 @@ public class AuthServlet extends BaseServlet {
         } catch (Exception e) {
             r.setAttribute("error", error(e));
             doGet(r, s);
+        }
+    }
+
+    private static String publicBaseUrl(HttpServletRequest r) {
+        String env = System.getenv("FRESHORA_PUBLIC_URL");
+        if (env != null && !env.isBlank()) {
+            return env.trim().replaceAll("/+$", "");
+        }
+        return "http://localhost:" + r.getLocalPort() + r.getContextPath();
+    }
+
+    private static boolean isLocalRequest(HttpServletRequest r) {
+        try {
+            return r.getHeader("X-Forwarded-For") == null && java.net.InetAddress.getByName(r.getRemoteAddr()).isLoopbackAddress();
+        } catch (Exception e) {
+            return false;
         }
     }
 }

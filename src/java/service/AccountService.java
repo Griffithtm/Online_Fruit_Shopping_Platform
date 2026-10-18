@@ -1,8 +1,9 @@
 package service;
 
+import model.*;
+
 import config.DBConnect;
 import dao.Database;
-import model.SessionUser;
 import org.mindrot.jbcrypt.BCrypt;
 import java.sql.*;
 import java.util.*;
@@ -18,43 +19,43 @@ public class AccountService {
 
     public SessionUser login(String email, String password) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT * FROM users WHERE email=? AND status='ACTIVE'", email == null ? "" : email.trim());
-            if (u == null || !matches(password, (String) u.get("password_hash"))) {
-                throw new IllegalArgumentException("Incorrect email or password.");
+            User u = Database.one(User.class, c, "SELECT * FROM users WHERE email=? AND status='ACTIVE'", email == null ? "" : email.trim());
+            if (u == null || !matches(password, u.getPasswordHash())) {
+                throw new IllegalArgumentException("Thư điện tử hoặc mật khẩu không đúng.");
             }
-            Database.update(c, "UPDATE users SET last_login_at=SYSUTCDATETIME() WHERE id=?", u.get("id"));
-            return new SessionUser(((Number) u.get("id")).longValue(), (String) u.get("full_name"), (String) u.get("role"));
+            Database.update(c, "UPDATE users SET last_login_at=SYSUTCDATETIME() WHERE id=?", u.getId());
+            return new SessionUser(u.getId().longValue(), u.getFullName(), u.getRole(), u.getPasswordHash());
         }
     }
 
     public void register(String role, String email, String pass, String confirm, String name, String phone, String store) throws Exception {
         email = Validation.text(email, 254).toLowerCase(Locale.ROOT);
         if (!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
-            throw new IllegalArgumentException("Invalid email address.");
+            throw new IllegalArgumentException("Thư điện tử không hợp lệ.");
         }
         String hash = BCrypt.hashpw(Validation.password(pass, confirm), BCrypt.gensalt(12));
         name = Validation.text(name, 100);
         phone = Validation.text(phone, 20);
         try (Connection c = new DBConnect().getConnection()) {
             if ("SELLER".equals(role)) {
-                Database.rows(c, "EXEC dbo.register_seller ?,?,?,?,?", email, hash, name, Validation.text(store, 100), phone);
+                Database.rows(RegistrationResult.class, c, "EXEC dbo.register_seller ?,?,?,?,?", email, hash, name, Validation.text(store, 100), phone);
             } else if ("CUSTOMER".equals(role)) {
-                Database.rows(c, "EXEC dbo.register_customer ?,?,?,?", email, hash, name, phone);
+                Database.rows(RegistrationResult.class, c, "EXEC dbo.register_customer ?,?,?,?", email, hash, name, phone);
             } else {
-                throw new IllegalArgumentException("Invalid account type.");
+                throw new IllegalArgumentException("Loại tài khoản không hợp lệ.");
             }
         }
     }
 
-    public Map<String, Object> profile(long id) throws Exception {
+    public User profile(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.one(c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
+            return Database.one(User.class, c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
         }
     }
 
-    public List<Map<String, Object>> addresses(long id) throws Exception {
+    public List<Address> addresses(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.rows(c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", id);
+            return Database.rows(Address.class, c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", id);
         }
     }
 
@@ -67,12 +68,16 @@ public class AccountService {
     public void password(long id, String old, String pass, String confirm) throws Exception {
         Validation.password(pass, confirm);
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WHERE id=?", id);
-            if (!matches(old, (String) u.get("password_hash"))) {
-                throw new IllegalArgumentException("The current password is incorrect.");
+            c.setAutoCommit(false);
+            try {
+            User u = Database.one(User.class, c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
+            if (!matches(old, u.getPasswordHash())) {
+                throw new IllegalArgumentException("Mật khẩu hiện tại không đúng.");
             }
             Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), id);
             Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", id);
+            c.commit();
+            } catch(Exception ex) {c.rollback();throw ex;}
         }
     }
 
@@ -80,13 +85,13 @@ public class AccountService {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Database.one(c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
+                Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
                 Long aid = (id == null || id.isBlank()) ? null : Validation.id(id);
-                if (aid != null && Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=?", aid, uid) == null) {
-                    throw new IllegalArgumentException("Address not found.");
+                if (aid != null && Database.one(Address.class, c, "SELECT id FROM addresses WHERE id=? AND user_id=?", aid, uid) == null) {
+                    throw new IllegalArgumentException("Không tìm thấy địa chỉ.");
                 }
-                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && Database.one(c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED')", uid) != null) {
-                    throw new IllegalArgumentException("You cannot edit or delete an address while orders are being processed.");
+                if ((action.equals("deleteAddress") || action.equals("saveAddress")) && aid != null && Database.one(Order.class, c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED')", uid) != null) {
+                    throw new IllegalArgumentException("Chưa thể sửa/xóa địa chỉ khi còn đơn đang xử lý.");
                 }
                 if (action.equals("deleteAddress")) {
                     Database.update(c, "DELETE FROM addresses WHERE id=? AND user_id=?", aid, uid);
@@ -95,7 +100,6 @@ public class AccountService {
                     Database.update(c, "UPDATE addresses SET is_default=1 WHERE id=? AND user_id=?", aid, uid);
                 } else {
                     name = Validation.text(name, 100);
-                    phone = Validation.text(phone, 20);
                     phone = Validation.text(phone, 20);
                     line = Validation.text(line, 255);
                     ward = Validation.text(ward, 100);
@@ -110,6 +114,9 @@ public class AccountService {
                         Database.update(c, "UPDATE addresses SET recipient_name=?,phone=?,address_line=?,ward=?,district=?,city=?,is_default=?,updated_at=SYSUTCDATETIME() WHERE id=? AND user_id=?", name, phone, line, ward, district, city, primary, aid, uid);
                     }
                 }
+                if (Database.one(Address.class, c, "SELECT id FROM addresses WHERE user_id=? AND is_default=1",uid)==null) {
+                    Database.update(c,"UPDATE addresses SET is_default=1 WHERE id=(SELECT MIN(id) FROM addresses WHERE user_id=?)",uid);
+                }
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
@@ -122,20 +129,29 @@ public class AccountService {
         return MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
     }
 
-    public void forgot(String email) throws Exception {
+    /** Tra ve token CHI KHI thu duoc luu o che do outbox (phat trien); gui SMTP that thi tra ve null. */
+    public String forgot(String email, String baseUrl) throws Exception {
+        String normalized = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Vui lòng nhập địa chỉ thư điện tử.");
+        }
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT id,email FROM users WHERE email=? AND status='ACTIVE'", email);
+            User u = Database.one(User.class, c, "SELECT id,email FROM users WHERE email=? AND status='ACTIVE'", normalized);
             if (u == null) {
-                return;
+                return null;
             }
             byte[] random = new byte[32];
             new SecureRandom().nextBytes(random);
             String token = HexFormat.of().formatHex(random);
-            Database.update(c, "INSERT password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,DATEADD(minute,20,SYSUTCDATETIME()))", u.get("id"), digest(token));
-            String base = System.getenv().getOrDefault("FRESHORA_PUBLIC_URL", "http://localhost:9999/Freshora");
-            Path dir = Path.of(System.getProperty("catalina.base", System.getProperty("user.home")), "freshora-private-outbox");
-            Files.createDirectories(dir);
-            Files.writeString(dir.resolve(UUID.randomUUID() + ".eml"), "To: " + u.get("email") + "\nSubject: Freshora password reset (local development)\n\n" + base + "/reset?token=" + token + "\nExpires in 20 minutes.\n", StandardCharsets.UTF_8);
+            Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", u.getId());
+            Database.update(c, "INSERT password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,DATEADD(minute,20,SYSUTCDATETIME()))", u.getId(), digest(token));
+            try {
+                String saved = new MailService().recovery(u.getEmail(), baseUrl + "/reset?token=" + token);
+                return saved == null ? null : token;
+            } catch (Exception e) {
+                Database.update(c, "DELETE FROM password_reset_tokens WHERE token_hash=?", digest(token));
+                throw e;
+            }
         }
     }
 
@@ -144,12 +160,16 @@ public class AccountService {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Map<String, Object> t = Database.one(c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", digest(token == null ? "" : token));
+                byte[] tokenHash=digest(token == null ? "" : token);
+                PasswordResetToken owner=Database.one(PasswordResetToken.class, c, "SELECT user_id FROM password_reset_tokens WHERE token_hash=?",tokenHash);
+                if(owner==null) throw new IllegalArgumentException("Liên kết đã hết hạn hoặc đã được sử dụng.");
+                Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?",owner.getUserId());
+                PasswordResetToken t = Database.one(PasswordResetToken.class, c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", tokenHash);
                 if (t == null) {
-                    throw new IllegalArgumentException("This link has expired or has already been used.");
+                    throw new IllegalArgumentException("Liên kết đã hết hạn hoặc đã được sử dụng.");
                 }
-                Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), t.get("user_id"));
-                Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", t.get("user_id"));
+                Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), t.getUserId());
+                Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", t.getUserId());
                 c.commit();
             } catch (Exception e) {
                 c.rollback();

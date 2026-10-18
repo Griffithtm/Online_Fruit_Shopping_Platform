@@ -1,0 +1,7 @@
+<%@ page pageEncoding="UTF-8" %><%@ include file="/WEB-INF/views/header.jsp" %>
+<h1>Điểm thưởng</h1><h2>Điểm khả dụng: ${wallet.pointsBalance}</h2><p>Đang chờ: ${wallet.totals.pending} · Hết hạn/thu hồi: ${wallet.totals.expired}</p><p>Hạng thành viên: <c:out value="${vi:label(wallet.tier)}"/></p><p><c:out value="${wallet.benefits}"/></p><p>Điểm được cộng sau khi giao hàng đủ điều kiện và có thể dùng khi thanh toán.</p>
+<p>Chi tiêu từ đơn đã giao đủ điều kiện trong ${wallet.membership.periodDays} ngày qua: ${wallet.membership.qualifyingSpend} đ. Không bao gồm đơn đã hoàn tiền.</p>
+<c:if test="${not empty wallet.membership.warning}"><p class="alert alert-warning"><c:out value="${wallet.membership.warning}"/></p></c:if>
+<c:if test="${not empty wallet.membership.nextTier}"><p>Hạng tiếp theo: <c:out value="${vi:label(wallet.membership.nextTier)}"/>. Chi tiêu đủ điều kiện còn thiếu: ${wallet.membership.remainingSpend} đ.</p></c:if>
+<table class="table"><thead><tr><th>Ngày</th><th>Loại</th><th>Điểm</th><th>Còn lại</th><th>Trạng thái</th><th>Hết hạn</th></tr></thead><tbody><c:forEach items="${wallet.entries}" var="e"><tr><td><c:out value="${e.createdAt}"/></td><td><c:out value="${vi:label(e.type)}"/></td><td>${e.points}</td><td>${e.remainingPoints}</td><td><c:out value="${vi:label(e.status)}"/></td><td><c:out value="${e.pointsExpireAt}"/></td></tr></c:forEach></tbody></table>
+                <%@ include file="/WEB-INF/views/footer.jsp" %>

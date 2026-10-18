@@ -1,5 +1,7 @@
 package controller;
 
+import model.*;
+
 import service.*;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -15,6 +17,8 @@ public class CatalogServlet extends BaseServlet {
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
             r.setAttribute("categories", service.categories());
+            r.setAttribute("shops", service.shops());
+            if (r.getServletPath().equals("/compare")) r.setAttribute("deliveryAreas",service.deliveryAreas());
             String p = r.getServletPath();
             if (p.equals("/shops")) {
                 r.setAttribute("shops", service.shops());
@@ -23,33 +27,33 @@ public class CatalogServlet extends BaseServlet {
             }
             if (p.equals("/product")) {
                 long id = Validation.id(r.getParameter("id"));
-                Map<String, Object> product = service.product(id);
+                ListingDetails product = service.product(id);
                 if (product == null) {
                     s.sendError(404);
                     return;
                 }
                 r.setAttribute("product", product);
                 r.setAttribute("variants", service.variants(id));
-                r.setAttribute("similar", service.products(null, product.get("category_id").toString(), null, null, null, null, "priceDesc", false));
+                r.setAttribute("similar", service.products(null, product.getCategoryId().toString(), null, null, null, null, "priceDesc", false));
                 view(r, s, "product");
                 return;
             }
             String store = r.getParameter("store");
             if (p.equals("/shop")) {
                 store = r.getParameter("id");
-                Map<String, Object> shop = service.shop(Validation.id(store));
+                Store shop = service.shop(Validation.id(store));
                 if (shop == null) {
                     s.sendError(404);
                     return;
                 }
                 r.setAttribute("shop", shop);
             }
-            r.setAttribute("products", service.products(r.getParameter("q"), r.getParameter("category"), store, r.getParameter("min"), r.getParameter("max"), r.getParameter("rating"), r.getParameter("sort"), "1".equals(r.getParameter("promo"))));
+            r.setAttribute("products", service.products(r.getParameter("q"), r.getParameter("category"), store, r.getParameter("min"), r.getParameter("max"), r.getParameter("rating"), r.getParameter("sort"), "1".equals(r.getParameter("promo")), r.getParameter("availability")));
             view(r, s, p.equals("/compare") ? "compare" : "products");
         } catch (IllegalArgumentException e) {
             r.setAttribute("error", e.getMessage());
             r.setAttribute("products", List.of());
-            view(r, s, "products");
+            view(r, s, r.getServletPath().equals("/compare") ? "compare" : "products");
         } catch (Exception e) {
             throw new ServletException(e);
         }
