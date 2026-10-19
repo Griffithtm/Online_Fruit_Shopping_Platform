@@ -37,7 +37,7 @@ public class StockReservationService {
             List<OrderItem> lines = Database.rows(OrderItem.class, c, "SELECT * FROM order_items WITH(UPDLOCK,HOLDLOCK) WHERE seller_order_id=? AND reservation_status='NONE' ORDER BY variant_id,id", sellerOrderId);
             for (OrderItem line : lines) {
                 StockProduct product = Database.one(StockProduct.class, c, "SELECT v.price,l.status AS listing_status,v.status AS variant_status,s.status AS store_status,u.status AS owner_status,l.listing_type FROM variants v WITH(UPDLOCK,HOLDLOCK) JOIN listings l WITH(UPDLOCK,HOLDLOCK) ON l.id=v.listing_id JOIN stores s WITH(UPDLOCK,HOLDLOCK) ON s.id=l.store_id JOIN users u WITH(UPDLOCK,HOLDLOCK) ON u.id=s.owner_id WHERE v.id=?", line.getVariantId());
-                if (product == null || !"APPROVED".equals(product.getListingStatus()) || !"ACTIVE".equals(product.getVariantStatus()) || !"ACTIVE".equals(product.getStoreStatus()) || !"ACTIVE".equals(product.getOwnerStatus()) || !"PRODUCT".equals(product.getListingType())) throw new IllegalArgumentException("Có sản phẩm đã ngừng bán. Vui lòng kiểm tra giỏ hàng.");
+                if (product == null || !"PUBLISHED".equals(product.getListingStatus()) || !"ACTIVE".equals(product.getVariantStatus()) || !"ACTIVE".equals(product.getStoreStatus()) || !"ACTIVE".equals(product.getOwnerStatus()) || !"PRODUCT".equals(product.getListingType())) throw new IllegalArgumentException("Có sản phẩm đã ngừng bán. Vui lòng kiểm tra giỏ hàng.");
                 if ((product.getPrice()).compareTo(line.getUnitPrice()) != 0) throw new IllegalArgumentException("Giá đã thay đổi. Vui lòng kiểm tra và cập nhật giỏ hàng.");
                 int left = line.getQuantity().intValue();
                 boolean first = true;

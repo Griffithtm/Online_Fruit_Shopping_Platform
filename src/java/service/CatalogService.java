@@ -26,7 +26,7 @@ public class CatalogService {
     }
 
     public List<ProductOffer> products(String q,String category,String store,String min,String max,String rating,String sort,boolean promo,String availability) throws Exception {
-        String sql = "SELECT l.id AS listing_id,l.store_id,s.store_name,l.title,l.description,l.category_id,l.origin,v.id AS variant_id,v.option_name,v.unit,v.price,COALESCE(st.available_qty,0) AS available_qty,JSON_VALUE(l.image_urls,'$[0]') AS image,l.rating,l.created_at,s.rating AS seller_rating,COALESCE(pop.sold,0) AS sold FROM listings l JOIN stores s ON s.id=l.store_id JOIN users u ON u.id=s.owner_id JOIN variants v ON v.listing_id=l.id LEFT JOIN v_available_stock st ON st.variant_id=v.id OUTER APPLY(SELECT SUM(oi.quantity) sold FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE oi.variant_id=v.id AND so.status='DELIVERED') pop WHERE l.status='APPROVED' AND l.listing_type='PRODUCT' AND s.status='ACTIVE' AND u.status='ACTIVE' AND v.status='ACTIVE'";
+        String sql = "SELECT l.id AS listing_id,l.store_id,s.store_name,l.title,l.description,l.category_id,l.origin,v.id AS variant_id,v.option_name,v.unit,v.price,COALESCE(st.available_qty,0) AS available_qty,JSON_VALUE(l.image_urls,'$[0]') AS image,l.rating,l.created_at,s.rating AS seller_rating,COALESCE(pop.sold,0) AS sold FROM listings l JOIN stores s ON s.id=l.store_id JOIN users u ON u.id=s.owner_id JOIN variants v ON v.listing_id=l.id LEFT JOIN v_available_stock st ON st.variant_id=v.id OUTER APPLY(SELECT SUM(oi.quantity) sold FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE oi.variant_id=v.id AND so.status='DELIVERED') pop WHERE l.status='PUBLISHED' AND l.listing_type='PRODUCT' AND s.status='ACTIVE' AND u.status='ACTIVE' AND v.status='ACTIVE'";
         if (availability == null || availability.isBlank() || availability.equals("in")) sql += " AND COALESCE(st.available_qty,0)>0";
         else if (availability.equals("out")) sql += " AND COALESCE(st.available_qty,0)=0";
         else if (!availability.equals("all")) throw new IllegalArgumentException("Bộ lọc tình trạng hàng không hợp lệ.");
@@ -81,7 +81,7 @@ public class CatalogService {
 
     public ListingDetails product(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.one(ListingDetails.class, c, "SELECT l.*,s.store_name,s.rating AS seller_rating,s.description AS store_description,JSON_VALUE(l.image_urls,'$[0]') AS image FROM listings l JOIN stores s ON s.id=l.store_id JOIN users u ON u.id=s.owner_id WHERE l.id=? AND l.status='APPROVED' AND s.status='ACTIVE' AND u.status='ACTIVE' AND EXISTS(SELECT 1 FROM variants v WHERE v.listing_id=l.id AND v.status='ACTIVE')", id);
+            return Database.one(ListingDetails.class, c, "SELECT l.*,s.store_name,s.rating AS seller_rating,s.description AS store_description,JSON_VALUE(l.image_urls,'$[0]') AS image FROM listings l JOIN stores s ON s.id=l.store_id JOIN users u ON u.id=s.owner_id WHERE l.id=? AND l.status='PUBLISHED' AND s.status='ACTIVE' AND u.status='ACTIVE' AND EXISTS(SELECT 1 FROM variants v WHERE v.listing_id=l.id AND v.status='ACTIVE')", id);
         }
     }
 

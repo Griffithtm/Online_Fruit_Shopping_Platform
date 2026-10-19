@@ -120,7 +120,7 @@ CREATE TABLE dbo.[listings] (
     [plan_terms] NVARCHAR(1000) NULL,
     [enrollment_open] BIT NOT NULL DEFAULT 0,
     [rating] DECIMAL(3,2) NOT NULL DEFAULT 0,
-    [status] VARCHAR(20) NOT NULL DEFAULT ''''DRAFT'''' CHECK ([status] IN (''''DRAFT'''', ''''PENDING_REVIEW'''', ''''APPROVED'''', ''''REJECTED'''', ''''HIDDEN'''', ''''RETIRED'''')),
+    [status] VARCHAR(20) NOT NULL DEFAULT ''''DRAFT'''' CHECK ([status] IN (''''DRAFT'''', ''''PUBLISHED'''', ''''HIDDEN'''', ''''SUSPENDED'''', ''''RETIRED'''')),
     [rejection_reason] NVARCHAR(500) NULL,
     [created_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     [updated_at] DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
@@ -392,7 +392,7 @@ CREATE INDEX ix_audit_entity ON dbo.audit_logs(entity_type,entity_id,created_at)
  v.id AS variant_id,v.option_name,v.unit,v.price,st.available_qty
  FROM dbo.listings l JOIN dbo.stores s ON s.id=l.store_id JOIN dbo.users u ON u.id=s.owner_id
  JOIN dbo.variants v ON v.listing_id=l.id JOIN dbo.v_available_stock st ON st.variant_id=v.id
- WHERE l.status=''''APPROVED'''' AND l.listing_type=''''PRODUCT'''' AND s.status=''''ACTIVE'''' AND u.status=''''ACTIVE'''' AND v.status=''''ACTIVE'''' AND st.available_qty>0;'';
+ WHERE l.status=''''PUBLISHED'''' AND l.listing_type=''''PRODUCT'''' AND s.status=''''ACTIVE'''' AND u.status=''''ACTIVE'''' AND v.status=''''ACTIVE'''' AND st.available_qty>0;'';
     EXEC sys.sp_executesql N''CREATE OR ALTER TRIGGER dbo.tr_store_owner ON dbo.stores AFTER INSERT,UPDATE AS
 BEGIN
  SET NOCOUNT ON;
