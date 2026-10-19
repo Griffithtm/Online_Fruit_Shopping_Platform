@@ -98,4 +98,33 @@ public class CheckoutLine {
     public void setStoreName(String storeName) {
         this.storeName = storeName;
     }
+
+    // ThanhNC 2.1 (BA-09, BA-17): store owner (no buying from one's own store) and variant details for MSG33.
+    private Long ownerId;
+    private String unit;
+    private String optionName;
+
+    public Long getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(Long ownerId) {
+        this.ownerId = ownerId;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
+    }
+
+    public String getOptionName() {
+        return optionName;
+    }
+
+    public void setOptionName(String optionName) {
+        this.optionName = optionName;
+    }
 }

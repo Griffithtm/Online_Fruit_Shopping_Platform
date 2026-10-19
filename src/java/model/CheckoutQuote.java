@@ -143,4 +143,33 @@ public class CheckoutQuote {
     public void setFingerprint(String fingerprint) {
         this.fingerprint = fingerprint;
     }
+
+    // ThanhNC 2.1 (BA-11, BA-12): fee of one seller order, the points limit and the usable balance shown at checkout.
+    private java.math.BigDecimal areaFee;
+    private Long maxPoints;
+    private Long usablePoints;
+
+    public java.math.BigDecimal getAreaFee() {
+        return areaFee;
+    }
+
+    public void setAreaFee(java.math.BigDecimal areaFee) {
+        this.areaFee = areaFee;
+    }
+
+    public Long getMaxPoints() {
+        return maxPoints;
+    }
+
+    public void setMaxPoints(Long maxPoints) {
+        this.maxPoints = maxPoints;
+    }
+
+    public Long getUsablePoints() {
+        return usablePoints;
+    }
+
+    public void setUsablePoints(Long usablePoints) {
+        this.usablePoints = usablePoints;
+    }
 }

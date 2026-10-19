@@ -78,11 +78,11 @@ public class IterationTwoChecks {
    update("INSERT transactions(type,user_id,points,remaining_points,status,points_expire_at,idempotency_key) VALUES('POINTS_EARN',?,500,500,'AVAILABLE',DATEADD(day,365,CONVERT(date,SYSUTCDATETIME())),?)",buyer,tag+"-fresh");
    update("UPDATE users SET points_balance=points_balance+530 WHERE id=?",buyer);
    long expiresBefore=n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"));
-   Map<String,Object> pq=checkout.quote(buyer,address,"",0,"COD");
-   check(n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==530 && n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"))==expiresBefore && n(pq.get("usablePoints"))==500,"BA-10 quote reads usable points without writing");
+   CheckoutQuote pq=checkout.quote(buyer,address,"",0,"COD");
+   check(n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==530 && n(one("SELECT COUNT(*) n FROM transactions WHERE user_id=? AND type='POINTS_EXPIRE'",buyer).get("n"))==expiresBefore && pq.getUsablePoints()==500,"BA-10 quote reads usable points without writing");
    Map<String,Object> pct=one("SELECT TRY_CONVERT(int,value) n FROM settings WHERE type='POLICY' AND name='points_max_percent' AND status='ACTIVE'");
    long percent=pct==null || pct.get("n")==null?50:Math.min(100,n(pct.get("n"))),max1=Math.min(500,Math.min(100000*percent/100/1000,100));
-   check(n(pq.get("maxPoints"))==max1,"BA-12 maximum points follows points_max_percent");
+   check(pq.getMaxPoints()==max1,"BA-12 maximum points follows points_max_percent");
    rejectWith(()->checkout.quote(buyer,address,"",(int)max1+1,"COD"),util.Messages.get(util.Messages.MSG38,max1),"BA-12 too many points gives MSG38 with the maximum");
    cart.change(buyer,"add",variant2,1);long max2=Math.min(500,Math.min(200000*percent/100/1000,200));
    long pointsOrder=place("",(int)max2,"COD");
@@ -91,17 +91,17 @@ public class IterationTwoChecks {
    String areaName=tag+" area";long etaAddress,variant3,shortBatch,longBatch;
    try(Connection c=db()){Database.update(c,"INSERT settings(type,name,value) VALUES('SERVICE_AREA',?,?)",areaName,"{\"delivery_fee\":15000,\"eta_hours\":48}");
      etaAddress=Database.insert(c,"INSERT addresses(user_id,recipient_name,phone,address_line,ward,district,city) VALUES(?,'Test','0900000000','Test','Test','Test',?)",buyer,areaName);
-     variant3=Database.insert(c,"INSERT variants(listing_id,option_name,unit,price) VALUES(?,'2 kg box','box',100000)",Database.one(c,"SELECT listing_id FROM variants WHERE id=?",variant).get("listing_id"));
+     variant3=Database.insert(c,"INSERT variants(listing_id,option_name,unit,price) VALUES(?,'2 kg box','box',100000)",TestRows.one(c,"SELECT listing_id FROM variants WHERE id=?",variant).get("listing_id"));
      shortBatch=Database.insert(c,"INSERT batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(?,?,'Test',CONVERT(date,SYSUTCDATETIME()),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,1,CONVERT(date,SYSUTCDATETIME())),'Test',10,10,50000)",variant3,tag+"short");
      longBatch=Database.insert(c,"INSERT batches(variant_id,batch_no,origin,harvest_date,receipt_date,expiry_date,supplier_name,received_qty,remaining_qty,unit_cost) VALUES(?,?,'Test',CONVERT(date,SYSUTCDATETIME()),CONVERT(date,SYSUTCDATETIME()),DATEADD(day,30,CONVERT(date,SYSUTCDATETIME())),'Test',5,5,50000)",variant3,tag+"long");}
    cart.change(buyer,"add",variant3,6);
    rejectWith(()->checkout.quote(buyer,etaAddress),util.Messages.get(util.Messages.MSG33,5,"box","2 kg box"),"BA-13 quote counts only batches fresh on the delivery date (MSG33)");
    long line3=n(one("SELECT oi.id FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id JOIN orders o ON o.id=so.order_id WHERE o.customer_id=? AND o.status='CART' AND oi.variant_id=?",buyer,variant3).get("id"));
    cart.change(buyer,"update",line3,2);
-   Map<String,Object> eq=checkout.quote(buyer,etaAddress);
-   check(n(eq.get("etaHours"))==48 && ((BigDecimal)eq.get("fee")).compareTo(new BigDecimal("15000"))==0,"BA-11 service area eta_hours and fee are used");
+   CheckoutQuote eq=checkout.quote(buyer,etaAddress);
+   check(eq.getEtaHours()==48 && eq.getFee().compareTo(new BigDecimal("15000"))==0,"BA-11 service area eta_hours and fee are used");
    rejectWith(()->checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),"stale","",0,"COD"),util.Messages.get(util.Messages.MSG34),"BA-17 changed quote at placement gives MSG34");
-   long etaOrder=checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),(String)eq.get("fingerprint"),"",0,"COD");
+   long etaOrder=checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),eq.getFingerprint(),"",0,"COD");
    check(n(one("SELECT COUNT(*) n FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE so.order_id=? AND oi.batch_id<>?",etaOrder,longBatch).get("n"))==0 && n(one("SELECT reserved_qty FROM batches WHERE id=?",shortBatch).get("reserved_qty"))==0,"BA-13 reservation skips batches expiring before delivery");
    Map<String,Object> placed=one("SELECT order_code,payable_amount FROM orders WHERE id=?",etaOrder);
    check(util.Messages.get(util.Messages.MSG39,placed.get("order_code"),new java.text.DecimalFormat("#,##0").format(placed.get("payable_amount"))+" VND").equals(checkout.placedNotice(buyer,etaOrder)),"BA-18 COD placement notice is MSG39");

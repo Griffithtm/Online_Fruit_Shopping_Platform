@@ -35,4 +35,15 @@ public class ServiceArea {
     public void setFee(java.math.BigDecimal fee) {
         this.fee = fee;
     }
+
+    // ThanhNC 2.1 (BA-11): optional "eta_hours" of the service area JSON; null means the delivery_eta_hours policy.
+    private Integer etaHours;
+
+    public Integer getEtaHours() {
+        return etaHours;
+    }
+
+    public void setEtaHours(Integer etaHours) {
+        this.etaHours = etaHours;
+    }
 }
