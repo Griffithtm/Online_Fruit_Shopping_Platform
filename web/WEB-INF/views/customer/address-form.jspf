@@ -1,3 +1,4 @@
+<%@ page pageEncoding="UTF-8" %>
 <%-- Address fields shared by the edit and add forms. Expects: af (values), fid ("new" or address id), isNewForm, fe (field errors of this form or empty). --%>
 <c:set var="cityInList" value="false" />
 <c:forEach items="${serviceAreas}" var="sa"><c:if test="${sa == af.city}"><c:set var="cityInList" value="true" /></c:if></c:forEach>
