@@ -3,15 +3,25 @@ package service;
 import model.*;
 
 import config.DBConnect;
+import dao.AuditDAO;
 import dao.Database;
+import dao.NotificationDAO;
+import dao.OrderDAO;
 import java.sql.*;
 import java.math.*;
 import java.util.*;
+import util.Messages;
+import util.OrderCodes;
 
 /**
  * Every order mutation locks the parent order before seller orders and batches.
  */
 public class FulfillmentService {
+
+    // ThanhNC 2.2 (BA-15, BA-44, BA-45)
+    private final OrderDAO orders = new OrderDAO();
+    private final AuditDAO audit = new AuditDAO();
+    private final NotificationDAO notifications = new NotificationDAO();
 
     public static int policy(Connection c, String key, int fallback) throws Exception {
         CountResult p = Database.one(CountResult.class, c, "SELECT TRY_CONVERT(int,value) AS n FROM settings WHERE type='POLICY' AND name=? AND status='ACTIVE'", key);
@@ -95,7 +105,8 @@ public class FulfillmentService {
                         break;
                     case "cancel":
                         require(customer && Set.of("NEW", "ACCEPTED").contains(old));
-                        if (Database.one(Order.class, c, "SELECT id FROM orders WHERE id=? AND placed_at>=DATEADD(minute,-?,SYSUTCDATETIME())", o.getId(), policy(c, "cancellation_window_minutes", 30)) == null) {
+                        // ThanhNC BA-15: compare with the deadline snapshotted at placement (old orders: placed_at + current window).
+                        if (!orders.withinCancelDeadline(c, o.getId(), policy(c, "cancellation_window_minutes", 30))) {
                             throw new IllegalArgumentException("Đã hết thời hạn cho phép hủy đơn.");
                         }
                         detail = "Khách hàng hủy đơn";
@@ -167,29 +178,54 @@ public class FulfillmentService {
                     }
                     if (Database.one(SellerOrder.class, c, "SELECT id FROM seller_orders WHERE order_id=? AND status NOT IN ('CANCELLED','REJECTED')", o.getId()) == null) {
                         Database.update(c, "UPDATE orders SET status='CANCELLED',updated_at=SYSUTCDATETIME() WHERE id=?", o.getId());
+                        // ThanhNC BA-44: the parent order changes status too.
+                        audit.log(c, actor, "Order", o.getId(), "ORDER_CANCELLED", o.getStatus(), "CANCELLED", detail);
                         BenefitsService.returnAll(c, o);
                     }
                 }
-                Database.update(c, "INSERT audit_logs(actor_id,entity_type,entity_id,action,old_value,new_value,note) VALUES(?,'SellerOrder',?,?,?,?,?)", actor, sid, action, old, next, detail);
-                Database.update(c, "INSERT notifications(user_id,event_type,title,content,link_url,dedup_key) VALUES(?,'ORDER_UPDATE',N'Đơn hàng đã cập nhật',?,'/orders',?)", o.getCustomerId(), "Đơn hàng cửa hàng " + sid + ": " + util.Vietnamese.label(next), "seller-order:" + sid + ":" + next);
+                // ThanhNC BA-45: the audit id makes the dedup key unique even when a seller order returns to an earlier status.
+                long auditId = audit.log(c, actor, "SellerOrder", sid, action, old, next, detail);
+                notifyChange(c, o, so, next, detail, auditId, customer);
                 if (next.equals("DELIVERED")) {
                     LoyaltyService.earn(c, FulfillmentService.id(o.getCustomerId()), sid, FulfillmentService.money(so.getSubtotal()).subtract(FulfillmentService.money(so.getDiscountAmount())).subtract(FulfillmentService.money(so.getPointsDiscount())));
                     if ("COD".equals(o.getPaymentMethod())) {
                         Database.update(c, "INSERT transactions(type,user_id,order_id,seller_order_id,method,amount,status,reconciled,idempotency_key) VALUES('COD',?,?,?,'COD',?,'PAID',1,?)", o.getCustomerId(), o.getId(), sid, money(so.getSubtotal()).subtract(money(so.getDiscountAmount())).subtract(money(so.getPointsDiscount())).add(money(so.getDeliveryFee())), "cod-collected:" + sid);
                     }
-                    if (Database.one(SellerOrder.class, c, "SELECT id FROM seller_orders WHERE order_id=? AND status NOT IN ('DELIVERED','CANCELLED','REJECTED')", o.getId()) == null) {
-                        Database.update(c, "UPDATE orders SET status='COMPLETED',updated_at=SYSUTCDATETIME() WHERE id=?", o.getId());
-                        Database.update(c, "UPDATE transactions SET status='COMPLETED' WHERE order_id=? AND type='COD' AND seller_order_id IS NULL AND status='PENDING'", o.getId());
-                    }
                 }
-                if (Database.one(SellerOrder.class, c, "SELECT id FROM seller_orders WHERE order_id=? AND status NOT IN ('DELIVERED','CANCELLED','REJECTED')", o.getId()) == null && Database.one(SellerOrder.class, c, "SELECT id FROM seller_orders WHERE order_id=? AND status='DELIVERED'", o.getId()) != null) {
-                    Database.update(c, "UPDATE orders SET status='COMPLETED',updated_at=SYSUTCDATETIME() WHERE id=?", o.getId());
-                    Database.update(c, "UPDATE transactions SET status='COMPLETED' WHERE order_id=? AND type='COD' AND seller_order_id IS NULL AND status='PENDING'", o.getId());
+                // ThanhNC BA-44: the two completion checks that were here had the same rule (every seller order final, at least one Delivered);
+                // one check now completes the order once and audits it.
+                if (orders.completeIfDone(c, o.getId())) {
+                    audit.log(c, actor, "Order", o.getId(), "ORDER_COMPLETED", "CONFIRMED", "COMPLETED", null);
                 }
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
                 throw e;
+            }
+        }
+    }
+
+    /**
+     * ThanhNC BA-45: status messages by event (MSG47/48/49/61/63) with the seller order code. The customer is always told;
+     * the Seller hears about a customer cancellation and every active Admin about a failed delivery.
+     */
+    private void notifyChange(Connection c, Order o, SellerOrderDetails so, String next, String reason, long auditId, boolean byCustomer) throws Exception {
+        String code = OrderCodes.sellerOrderCode(o.getOrderCode(), so.getStoreId());
+        String content = switch (next) {
+            case "REJECTED" -> Messages.get(Messages.MSG47, code, reason);
+            case "CANCELLED" -> Messages.get(Messages.MSG48, code);
+            case "DELIVERED" -> Messages.get(Messages.MSG61, code);
+            case "FAILED" -> Messages.get(Messages.MSG63, code, reason);
+            default -> Messages.get(Messages.MSG49, code, util.Vietnamese.label(next));
+        };
+        String key = "seller-order:" + so.getId() + ":" + next + ":" + auditId;
+        notifications.send(c, o.getCustomerId(), "ORDER_UPDATE", "Cập nhật đơn hàng", content, "/orders", key);
+        if ("CANCELLED".equals(next) && byCustomer) {
+            notifications.send(c, so.getOwnerId(), "SELLER_ORDER_CANCELLED", "Đơn hàng bị hủy", content, "/seller/orders", key + ":seller");
+        }
+        if ("FAILED".equals(next)) {
+            for (User admin : notifications.activeAdmins(c)) {
+                notifications.send(c, admin.getId(), "DELIVERY_FAILED", "Giao hàng thất bại", content, "/admin/orders", key + ":admin:" + admin.getId());
             }
         }
     }

@@ -696,3 +696,8 @@ IF @@TRANCOUNT>0 ROLLBACK;
 THROW;
 END CATCH;
 ';
+
+-- FE-05.2 (BA-15, ThanhNC 2.2): cancellation deadline snapshotted at placement; policy changes apply only to new orders.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.orders'',''cancel_deadline_at'') IS NULL ALTER TABLE dbo.orders ADD cancel_deadline_at DATETIME2 NULL;
+';

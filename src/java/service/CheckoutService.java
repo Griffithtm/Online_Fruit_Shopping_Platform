@@ -4,10 +4,14 @@ import model.*;
 
 import config.DBConnect;
 import dao.AddressDAO;
+import dao.AuditDAO;
 import dao.CheckoutDAO;
+import dao.NotificationDAO;
+import dao.OrderDAO;
 import dao.Database;
 import dao.SettingDAO;
 import util.Messages;
+import util.OrderCodes;
 import java.sql.*;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,6 +29,9 @@ public class CheckoutService {
     private final CheckoutDAO dao = new CheckoutDAO();
     private final AddressDAO addresses = new AddressDAO();
     private final SettingDAO settings = new SettingDAO();
+    private final OrderDAO orders = new OrderDAO();
+    private final AuditDAO audit = new AuditDAO();
+    private final NotificationDAO notifications = new NotificationDAO();
 
     public CheckoutQuote quote(long uid, long addressId) throws Exception {
         return quote(uid, addressId, "", 0, "COD");
@@ -300,6 +307,18 @@ public class CheckoutService {
                 }
                 if (method.equals("COD")) {
                     Database.update(c, "INSERT transactions(type,user_id,order_id,method,amount,status,idempotency_key) VALUES('COD',?,?,'COD',?,'PENDING',?)", uid, oid, q.getTotal(), "cod:" + oid);
+                }
+                // ThanhNC BA-15: cancellation deadline = this order's placed_at + the window in force now.
+                orders.setCancelDeadline(c, oid, FulfillmentService.policy(c, "cancellation_window_minutes", 30));
+                // ThanhNC BA-44: placement is an order status change (Cart → Confirmed / Awaiting Payment).
+                String placedStatus = method.equals("COD") ? "CONFIRMED" : "AWAITING_PAYMENT";
+                audit.log(c, uid, "Order", oid, "ORDER_PLACED", "CART", placedStatus, null);
+                // ThanhNC BA-14: a COD order is ready for acceptance now; online orders are announced after payment (FE-06).
+                if (method.equals("COD")) {
+                    for (SellerOrderDetails so : orders.sellerOrdersWithOwner(c, oid)) {
+                        notifications.send(c, so.getOwnerId(), "SELLER_ORDER_NEW", "Đơn hàng mới",
+                                Messages.get(Messages.MSG83, OrderCodes.sellerOrderCode("FR" + oid, so.getStoreId())), "/seller/orders", "seller-order:new:" + so.getId());
+                    }
                 }
                 c.commit();
                 return oid;

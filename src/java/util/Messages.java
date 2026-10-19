@@ -17,8 +17,11 @@ public final class Messages {
             MSG15 = "MSG15", MSG16 = "MSG16", MSG17 = "MSG17", MSG18 = "MSG18", MSG19 = "MSG19",
             MSG32 = "MSG32", MSG33 = "MSG33", MSG34 = "MSG34", MSG35 = "MSG35", MSG36 = "MSG36",
             MSG37 = "MSG37", MSG38 = "MSG38", MSG39 = "MSG39", MSG40 = "MSG40",
+            MSG47 = "MSG47", MSG48 = "MSG48", MSG49 = "MSG49", MSG61 = "MSG61", MSG63 = "MSG63",
             // MSG81–82: added by FE-01.2 (BA-04); to be added to SRS III.2.
-            MSG81 = "MSG81", MSG82 = "MSG82";
+            MSG81 = "MSG81", MSG82 = "MSG82",
+            // MSG83: added by FE-05.1 (BA-14, ThanhNC 2.2); to be added to SRS III.2.
+            MSG83 = "MSG83";
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{[a-z_]+\\}");
     private static final Map<String, String> TEXT = new HashMap<>();
@@ -107,6 +110,8 @@ public final class Messages {
         // Not yet in SRS III.2 (to be added): address deletion feedback, FE-01.2 / BA-04.
         TEXT.put("MSG81", "Đã xóa địa chỉ thành công.");
         TEXT.put("MSG82", "Đã xóa địa chỉ. {address} hiện là địa chỉ giao hàng mặc định của bạn.");
+        // EN (SRS III.2): New seller order {seller_order_code} is waiting for your acceptance.
+        TEXT.put("MSG83", "Bạn có đơn hàng mới {seller_order_code} đang chờ tiếp nhận.");
     }
 
     private Messages() {

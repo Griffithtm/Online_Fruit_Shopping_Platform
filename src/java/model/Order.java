@@ -218,4 +218,15 @@ public class Order {
     public void setPaymentExpiresAt(java.sql.Timestamp paymentExpiresAt) {
         this.paymentExpiresAt = paymentExpiresAt;
     }
+
+    // ThanhNC 2.2 (BA-15): cancellation deadline snapshotted at placement (UTC).
+    private java.sql.Timestamp cancelDeadlineAt;
+
+    public java.sql.Timestamp getCancelDeadlineAt() {
+        return cancelDeadlineAt;
+    }
+
+    public void setCancelDeadlineAt(java.sql.Timestamp cancelDeadlineAt) {
+        this.cancelDeadlineAt = cancelDeadlineAt;
+    }
 }

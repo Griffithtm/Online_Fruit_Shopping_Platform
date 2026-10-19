@@ -11,6 +11,10 @@ public class IterationTwoChecks {
  static long user(Connection c,String suffix,String role)throws Exception{return Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,'test-only',?,?)",tag+suffix+"@test.invalid",tag+suffix,role);}
  static Map<String,Object> one(String sql,Object...args)throws Exception{try(Connection c=db()){return TestRows.one(c,sql,args);}}
  static void update(String sql,Object...args)throws Exception{try(Connection c=db()){Database.update(c,sql,args);}}
+ /** Seller order code as shown to users (util.OrderCodes). */
+ static String code(long oid,long storeId)throws Exception{return util.OrderCodes.sellerOrderCode((String)one("SELECT order_code FROM orders WHERE id=?",oid).get("order_code"),storeId);}
+ /** Content of the user's notification whose dedup key matches the LIKE pattern, or null. */
+ static String notice(long userId,String dedupLike)throws Exception{Map<String,Object> r=one("SELECT TOP 1 content FROM notifications WHERE user_id=? AND dedup_key LIKE ? ORDER BY id DESC",userId,dedupLike);return r==null?null:(String)r.get("content");}
  static long sid(long oid,long st)throws Exception{return n(one("SELECT id FROM seller_orders WHERE order_id=? AND store_id=?",oid,st).get("id"));}
  static long place(String voucher,int points,String method)throws Exception{
   CheckoutService service=new CheckoutService();CheckoutQuote q=service.quote(buyer,address,voucher,points,method);String key=UUID.randomUUID().toString();long oid=service.place(buyer,address,key,(String)q.getFingerprint(),voucher,points,method);
@@ -40,6 +44,12 @@ public class IterationTwoChecks {
    CartService cart=new CartService();CheckoutService checkout=new CheckoutService();FulfillmentService flow=new FulfillmentService();
    cart.change(buyer,"add",variant,2);cart.change(buyer,"add",variant2,1);
    long oid=place("",0,"COD"),first=sid(oid,store),second=sid(oid,store2);
+   // ---- Iteration 2.2 (BA-14, BA-15, BA-44) at placement ----
+   long window=n(Optional.ofNullable(one("SELECT TRY_CONVERT(int,value) n FROM settings WHERE type='POLICY' AND name='cancellation_window_minutes' AND status='ACTIVE'")).map(r->r.get("n")).orElse(30));
+   check(n(one("SELECT DATEDIFF(second,placed_at,cancel_deadline_at) n FROM orders WHERE id=?",oid).get("n"))==window*60,"BA-15 cancel deadline = placed_at + cancellation window");
+   check(one("SELECT id FROM audit_logs WHERE entity_type='Order' AND entity_id=? AND action='ORDER_PLACED' AND old_value='CART' AND new_value='CONFIRMED'",oid)!=null,"BA-44 placement audited (CART → CONFIRMED)");
+   for(long[] so:new long[][]{{first,seller,store},{second,other,store2}})
+     check(util.Messages.get(util.Messages.MSG83,code(oid,so[2])).equals(one("SELECT content FROM notifications WHERE user_id=? AND dedup_key=?",so[1],"seller-order:new:"+so[0]).get("content")),"BA-14 store owner notified of new COD order (MSG83) for store "+so[2]);
    check(n(one("SELECT delivery_address_id FROM orders WHERE id=?",oid).get("delivery_address_id"))==address,"placed order records the chosen delivery_address_id");
    BigDecimal areaFee=(BigDecimal)one("SELECT TRY_CONVERT(decimal(15,2),JSON_VALUE(s.value,'$.delivery_fee')) fee FROM settings s JOIN addresses a ON a.city=s.name WHERE s.type='SERVICE_AREA' AND a.id=?",address).get("fee");
    check(((BigDecimal)one("SELECT delivery_fee FROM seller_orders WHERE id=?",first).get("delivery_fee")).compareTo(areaFee)==0 && ((BigDecimal)one("SELECT delivery_fee FROM seller_orders WHERE id=?",second).get("delivery_fee")).compareTo(areaFee)==0,"BA-11 each seller order pays the area delivery fee");
@@ -47,10 +57,13 @@ public class IterationTwoChecks {
    check(n(one("SELECT SUM(reserved_qty) n FROM batches WHERE variant_id IN (?,?)",variant,variant2).get("n"))==3,"all sellers reserved");
    reject(()->flow.change(seller,"SELLER",first,"reject","",null,false),"rejection requires reason");
    flow.change(other,"SELLER",second,"reject","Unable to fulfill",null,false);
+   check(util.Messages.get(util.Messages.MSG47,code(oid,store2),"Unable to fulfill").equals(notice(buyer,"seller-order:"+second+":REJECTED:%")),"BA-45 customer gets MSG47 with the rejection reason and seller order code");
    check(n(one("SELECT reserved_qty FROM batches WHERE variant_id=?",variant2).get("reserved_qty"))==0,"rejection releases only rejected seller stock");
    check("CONFIRMED".equals(one("SELECT status FROM orders WHERE id=?",oid).get("status")),"other seller order remains active");
    deliver(oid,first,seller);
    check("COMPLETED".equals(one("SELECT status FROM orders WHERE id=?",oid).get("status")),"parent completes after remaining seller delivers");
+   check(n(one("SELECT COUNT(*) n FROM audit_logs WHERE entity_type='Order' AND entity_id=? AND action='ORDER_COMPLETED'",oid).get("n"))==1,"BA-44 1 Delivered + 1 Rejected completes the order exactly once (audited)");
+   check(util.Messages.get(util.Messages.MSG61,code(oid,store)).equals(notice(buyer,"seller-order:"+first+":DELIVERED:%")),"BA-45 customer gets MSG61 on delivery");
    check(n(one("SELECT remaining_qty FROM batches WHERE variant_id=?",variant).get("remaining_qty"))==98,"delivery consumes allocated quantity once");
    check(n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==20,"delivery earns points once");
    check(new LoyaltyService().wallet(buyer).getTier()!=null,"membership tier recalculated");
@@ -60,6 +73,9 @@ public class IterationTwoChecks {
    check("REFUNDED".equals(one("SELECT status FROM transactions WHERE id=?",refund).get("status")),"manual COD refund confirmed");check(n(one("SELECT points_balance FROM users WHERE id=?",buyer).get("points_balance"))==0,"refund reverses unspent earned points");
    reject(()->finance.settle(admin,first),"settlement waits for refund window");
    cart.change(buyer,"add",variant,1);long cancelOrder=place("",0,"COD"),cancelSid=sid(cancelOrder,store);flow.change(seller,"SELLER",cancelSid,"accept",null,null,false);flow.change(buyer,"CUSTOMER",cancelSid,"cancel",null,null,false);check("CANCELLED".equals(one("SELECT status FROM orders WHERE id=?",cancelOrder).get("status")),"customer can cancel accepted order within window");
+   check(one("SELECT id FROM audit_logs WHERE entity_type='Order' AND entity_id=? AND action='ORDER_CANCELLED' AND old_value='CONFIRMED' AND new_value='CANCELLED'",cancelOrder)!=null,"BA-44 whole-order cancellation audited");
+   check(util.Messages.get(util.Messages.MSG48,code(cancelOrder,store)).equals(notice(seller,"seller-order:"+cancelSid+":CANCELLED:%:seller")),"BA-45 seller gets MSG48 when the customer cancels");
+   check(n(one("SELECT COUNT(*) n FROM notifications WHERE dedup_key LIKE ?","seller-order:"+cancelSid+":CANCELLED:%").get("n"))==2,"BA-45 customer and seller each notified once of the cancellation");
    Map<String,String> p=new HashMap<>();p.put("action","save");p.put("name",tag+" voucher");p.put("code",tag.replace("-","")+"OFF");p.put("discountType","PERCENT");p.put("value","10");p.put("budget","1000000");p.put("minimum","0");p.put("limit","10");p.put("perCustomer","1");p.put("start","2026-01-01T00:00");p.put("end","2030-01-01T00:00");new PromotionService().save(admin,"ADMIN",TestForms.promotion(p));long promo=n(one("SELECT id FROM promotions WHERE name=?",tag+" voucher").get("id"));new PromotionService().save(admin,"ADMIN",TestForms.promotion(Map.of("action","state","id",Long.toString(promo),"state","SCHEDULED")));
    cart.change(buyer,"add",variant,1);CheckoutQuote quote=checkout.quote(buyer,address,p.get("code"),0,"COD");check(((BigDecimal)quote.getDiscount()).compareTo(new BigDecimal("10000"))==0,"voucher computes server-side discount");long discountOrder=place(p.get("code"),0,"COD");
    cart.change(buyer,"add",variant,1);reject(()->checkout.quote(buyer,address,p.get("code"),0,"COD"),"voucher per-customer limit enforced");
@@ -110,6 +126,19 @@ public class IterationTwoChecks {
    check(checkout.placedNotice(seller,awaiting)==null,"BA-18 notice is not shown for another customer's order");
    cart.change(buyer,"add",variant,1);
    rejectWith(()->checkout.quote(buyer,address,"NOPE"+tag.replace("-",""),0,"COD"),util.Messages.get(util.Messages.MSG37,"mã không hợp lệ hoặc ngoài thời gian áp dụng"),"BA-17 unknown voucher gives MSG37");
+   // ---- Iteration 2.2: expired cancel deadline (BA-15) and failed delivery (BA-45). The buyer's cart holds 1 x variant here. ----
+   long lateOrder=place("",0,"COD"),lateSid=sid(lateOrder,store);
+   update("UPDATE orders SET cancel_deadline_at=DATEADD(minute,-1,SYSUTCDATETIME()) WHERE id=?",lateOrder);
+   reject(()->flow.change(buyer,"CUSTOMER",lateSid,"cancel",null,null,false),"BA-15 cancellation after the snapshotted deadline is refused");
+   check("NEW".equals(one("SELECT status FROM seller_orders WHERE id=?",lateSid).get("status")),"BA-15 refused cancellation leaves the seller order unchanged");
+   flow.change(seller,"SELLER",lateSid,"accept",null,null,false);flow.change(seller,"SELLER",lateSid,"ready",null,null,false);flow.change(admin,"ADMIN",lateSid,"assign","Keep chilled",courier,false);
+   flow.change(courier,"DELIVERY_STAFF",lateSid,"fail","Customer not at home",null,false);
+   String failed=util.Messages.get(util.Messages.MSG63,code(lateOrder,store),"Customer not at home");
+   check(failed.equals(notice(buyer,"seller-order:"+lateSid+":FAILED:%")),"BA-45 customer gets MSG63 with the failure reason");
+   check(failed.equals(notice(admin,"seller-order:"+lateSid+":FAILED:%:admin:"+admin)),"BA-45 every active admin gets MSG63 for a failed delivery");
+   check(util.Messages.get(util.Messages.MSG49,code(lateOrder,store),util.Vietnamese.label("ACCEPTED")).equals(notice(buyer,"seller-order:"+lateSid+":ACCEPTED:%")),"BA-45 other status changes use MSG49");
+   check(one("SELECT id FROM notifications WHERE dedup_key LIKE ? AND dedup_key NOT LIKE ?","seller-order:"+lateSid+":ASSIGNED:[0-9]%","%:%:%:%:%")!=null,"BA-45 dedup key carries the audit id");
+   try(Connection c=db()){check(!new dao.NotificationDAO().send(c,buyer,"ORDER_UPDATE","x","x","/orders","seller-order:new:"+first),"BA-45 duplicate dedup key is skipped without an error");}
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.
