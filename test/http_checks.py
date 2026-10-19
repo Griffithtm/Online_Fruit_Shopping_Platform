@@ -77,7 +77,7 @@ try:
  check('/login?success=1' in url,'email token resets password')
  check('/login' in c.get('/account')[2],'password recovery revokes previous session')
  code,body,url=recovery.post('/reset?token='+token,{'token':token,'password':'Again@123','confirm':'Again@123'})
- check('already been used' in body,'recovery token cannot be reused')
+ check('đã được sử dụng' in body,'recovery token cannot be reused')
  Client().login(address,'Recovered@123');check(True,'login succeeds with recovered password')
  Path('tmp/iter1-http-results.txt').write_text('\n'.join(log))
 finally:

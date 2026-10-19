@@ -2,13 +2,13 @@ package dao;
 
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.Map;
+import model.*;
 
 /** SQL for the users table used by FE-01.2 (profile and password). The caller owns the connection/transaction. */
 public class UserDAO {
 
-    public Map<String, Object> findProfile(Connection c, long id) throws SQLException {
-        return Database.one(c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
+    public User findProfile(Connection c, long id) throws SQLException {
+        return Database.one(User.class, c, "SELECT id,email,full_name,phone,role FROM users WHERE id=?", id);
     }
 
     /** Only name, email and phone are writable here; role, status, tier and points never are. */
@@ -18,24 +18,24 @@ public class UserDAO {
 
     /** True if another user already has this email (collation is case-insensitive); locks the key range. */
     public boolean emailTakenByOther(Connection c, String email, long id) throws SQLException {
-        return Database.one(c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE email=? AND id<>?", email, id) != null;
+        return Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE email=? AND id<>?", email, id) != null;
     }
 
     /** Locks the user row for the rest of the transaction. */
-    public Map<String, Object> lockUser(Connection c, long id) throws SQLException {
-        return Database.one(c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
+    public User lockUser(Connection c, long id) throws SQLException {
+        return Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
     }
 
     /** Locks the user row and returns its role as stored in the database, or null if the user does not exist. */
     public String lockRole(Connection c, long id) throws SQLException {
-        Map<String, Object> u = Database.one(c, "SELECT role FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
-        return u == null ? null : (String) u.get("role");
+        User u = Database.one(User.class, c, "SELECT role FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
+        return u == null ? null : (String) u.getRole();
     }
 
     /** Locks the user row and returns its password hash, or null if the user does not exist. */
     public String lockPasswordHash(Connection c, long id) throws SQLException {
-        Map<String, Object> u = Database.one(c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
-        return u == null ? null : (String) u.get("password_hash");
+        User u = Database.one(User.class, c, "SELECT password_hash FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", id);
+        return u == null ? null : (String) u.getPasswordHash();
     }
 
     public int updatePasswordHash(Connection c, long id, String hash) throws SQLException {

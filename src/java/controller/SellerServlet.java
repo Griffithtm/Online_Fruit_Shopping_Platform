@@ -1,5 +1,7 @@
 package controller;
 
+import model.*;
+
 import service.*;
 import jakarta.servlet.annotation.*;
 import jakarta.servlet.http.*;
@@ -25,8 +27,8 @@ public class SellerServlet extends BaseServlet {
             if (r.getParameter("images") != null) {
                 r.setAttribute("images", service.images(uid(r), Validation.id(r.getParameter("images"))));
             }
-            if(r.getParameter("editListing")!=null) r.setAttribute("editListing", service.listings(uid(r)).stream().filter(x -> x.get("id").toString().equals(r.getParameter("editListing"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Listing not found.")));
-            if(r.getParameter("editVariant")!=null) r.setAttribute("editVariant", service.variants(uid(r)).stream().filter(x -> x.get("id").toString().equals(r.getParameter("editVariant"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Variant not found.")));
+            if(r.getParameter("editListing")!=null) r.setAttribute("editListing", service.listings(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editListing"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin đăng.")));
+            if(r.getParameter("editVariant")!=null) r.setAttribute("editVariant", service.variants(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editVariant"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Biến thể không tồn tại.")));
             view(r, s, "seller");
         } catch (Exception e) {
             r.setAttribute("error", error(e));
@@ -49,9 +51,9 @@ public class SellerServlet extends BaseServlet {
                     service.stock(uid(r), Validation.id(r.getParameter("variant")), r.getParameter("batch"), r.getParameter("origin"), r.getParameter("harvest"), r.getParameter("receipt"), r.getParameter("expiry"), r.getParameter("supplier"), r.getParameter("quantity"), r.getParameter("cost"));
                 case "upload" -> {
                     long lid = Validation.id(id);
-                    boolean owned = service.listings(uid(r)).stream().anyMatch(l -> ((Number) l.get("id")).longValue() == lid);
+                    boolean owned = service.listings(uid(r)).stream().anyMatch(l -> l.getId().longValue() == lid);
                     if (!owned) {
-                        throw new IllegalArgumentException("The listing does not belong to your store.");
+                        throw new IllegalArgumentException("Tin đăng không thuộc cửa hàng.");
                     }
                     List<String> paths = new ArrayList<>();
                     Path dir = Path.of(System.getProperty("catalina.base"), "freshora-uploads");
@@ -59,14 +61,14 @@ public class SellerServlet extends BaseServlet {
                     for (Part part : r.getParts()) {
                         if (part.getName().equals("photos") && part.getSize() > 0) {
                             if (paths.size() >= 4) {
-                                throw new IllegalArgumentException("A maximum of 4 images is allowed.");
+                                throw new IllegalArgumentException("Tối đa 4 ảnh.");
                             }
                             java.awt.image.BufferedImage img;
                             try (InputStream in = part.getInputStream()) {
                                 img = ImageIO.read(in);
                             }
                             if (img == null || img.getWidth() > 6000 || img.getHeight() > 6000) {
-                                throw new IllegalArgumentException("Upload a valid image with dimensions no larger than 6000 pixels.");
+                                throw new IllegalArgumentException("Chỉ nhận ảnh hợp lệ, tối đa 6000px.");
                             }
                             String name = UUID.randomUUID() + ".png";
                             ImageIO.write(img, "png", dir.resolve(name).toFile());
@@ -74,13 +76,13 @@ public class SellerServlet extends BaseServlet {
                         }
                     }
                     if (paths.isEmpty()) {
-                        throw new IllegalArgumentException("Choose an image to upload.");
+                        throw new IllegalArgumentException("Chọn ảnh cần tải.");
                     }
                     service.images(uid(r), lid, paths);
                 }
                 case "reorder" -> {
                     long lid = Validation.id(id);
-                    List<String> paths = new ArrayList<>(service.images(uid(r), lid).stream().map(m -> (String) m.get("path")).toList());
+                    List<String> paths = new ArrayList<>(service.images(uid(r), lid).stream().map(m -> m.getPath()).toList());
                     int index = Integer.parseInt(r.getParameter("position"));
                     if (index > 0 && index < paths.size()) {
                         Collections.swap(paths, index, index - 1);
@@ -88,7 +90,7 @@ public class SellerServlet extends BaseServlet {
                     service.images(uid(r), lid, paths);
                 }
                 default ->
-                    throw new IllegalArgumentException("Invalid action.");
+                    throw new IllegalArgumentException("Thao tác không hợp lệ.");
             }
             redirect(r, s, "/seller?saved=1");
         } catch (Exception e) {

@@ -1,5 +1,7 @@
 package controller;
 
+import model.*;
+
 import service.*;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -11,12 +13,12 @@ public class SuggestionsServlet extends BaseServlet {
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws IOException {
         s.setContentType("application/json;charset=UTF-8");
         try {
-            List<Map<String,Object>> rows = new SellerService().suggestions(uid(r),r.getParameter("q"));
+            List<ProductOffer> rows = new SellerService().suggestions(uid(r),r.getParameter("q"));
             StringJoiner json = new StringJoiner(",", "[", "]");
-            for (Map<String,Object> p : rows) {
-                json.add("{\"title\":"+quote(p.get("title"))+",\"store\":"+quote(p.get("store_name"))
-                    +",\"pack\":"+quote(p.get("option_name"))+",\"price\":"+p.get("price")
-                    +",\"perKg\":"+p.get("unit_price_kg")+",\"id\":"+p.get("listing_id")+"}");
+            for (ProductOffer p : rows) {
+                json.add("{\"title\":"+quote(p.getTitle())+",\"store\":"+quote(p.getStoreName())
+                    +",\"pack\":"+quote(p.getOptionName())+",\"price\":"+p.getPrice()
+                    +",\"perKg\":"+p.getUnitPriceKg()+",\"id\":"+p.getListingId()+"}");
             }
             s.getWriter().write(json.toString());
         } catch (IllegalArgumentException e) { s.setStatus(400); s.getWriter().write("[]"); }

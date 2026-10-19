@@ -32,7 +32,7 @@ public class AuthServlet extends BaseServlet {
             if (p.equals("/login")) {
                 Long next = (Long) r.getSession().getAttribute("nextLogin");
                 if (next != null && next > System.currentTimeMillis()) {
-                    throw new IllegalArgumentException("Please wait a few seconds before trying again.");
+                    throw new IllegalArgumentException("Vui lòng đợi vài giây trước khi thử lại.");
                 }
                 r.getSession().setAttribute("nextLogin", System.currentTimeMillis() + 1500);
                 SessionUser user = service.login(r.getParameter("email"), r.getParameter("password"));
@@ -51,7 +51,7 @@ public class AuthServlet extends BaseServlet {
                     service.forgot(r.getParameter("email"));
                     r.getSession().setAttribute("lastRecovery", System.currentTimeMillis());
                 }
-                r.setAttribute("message", "If the email exists, password recovery instructions have been sent. Check your inbox and spam folder.");
+                r.setAttribute("message", "Nếu địa chỉ thư điện tử tồn tại, hướng dẫn khôi phục mật khẩu đã được gửi. Vui lòng kiểm tra hộp thư đến và thư rác.");
                 doGet(r, s);
                 return;
             } else if (p.equals("/reset")) {

@@ -1,5 +1,7 @@
 package controller;
 
+import model.*;
+
 import service.*;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
@@ -15,13 +17,13 @@ public class CartServlet extends BaseServlet {
 
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
-            List<Map<String, Object>> lines = service.lines(uid(r));
+            List<CartLine> lines = service.lines(uid(r));
             Map<String, BigDecimal> totals = new LinkedHashMap<>();
             BigDecimal total = BigDecimal.ZERO;
-            for (Map<String, Object> l : lines) {
-                BigDecimal n = (BigDecimal) l.get("line_total");
+            for (CartLine l : lines) {
+                BigDecimal n = l.getLineTotal();
                 total = total.add(n);
-                totals.merge((String) l.get("store_name"), n, BigDecimal::add);
+                totals.merge(l.getStoreName(), n, BigDecimal::add);
             }
             r.setAttribute("lines", lines);
             r.setAttribute("totals", totals);

@@ -3,17 +3,17 @@ package dao;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
+import model.*;
 
 /** SQL for the addresses table (FE-01.2). The caller owns the connection/transaction. */
 public class AddressDAO {
 
-    public List<Map<String, Object>> findByUser(Connection c, long uid) throws SQLException {
-        return Database.rows(c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", uid);
+    public List<Address> findByUser(Connection c, long uid) throws SQLException {
+        return Database.rows(Address.class, c, "SELECT * FROM addresses WHERE user_id=? ORDER BY is_default DESC,id", uid);
     }
 
     public boolean existsForUser(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=?", id, uid) != null;
+        return Database.one(Address.class, c, "SELECT id FROM addresses WHERE id=? AND user_id=?", id, uid) != null;
     }
 
     /**
@@ -21,22 +21,22 @@ public class AddressDAO {
      * delivery_address_id existed (NULL) still lock every address of the user.
      */
     public boolean usedByOpenOrder(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED') AND (delivery_address_id=? OR delivery_address_id IS NULL)", uid, id) != null;
+        return Database.one(Order.class, c, "SELECT TOP 1 id FROM orders WHERE customer_id=? AND status NOT IN ('CART','COMPLETED','CANCELLED','EXPIRED') AND (delivery_address_id=? OR delivery_address_id IS NULL)", uid, id) != null;
     }
 
     /** True when the address is the pickup address of the user's own store. */
     public boolean isStorePickup(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT id FROM stores WHERE owner_id=? AND pickup_address_id=?", uid, id) != null;
+        return Database.one(Store.class, c, "SELECT id FROM stores WHERE owner_id=? AND pickup_address_id=?", uid, id) != null;
     }
 
     /** True when the user's store still has a seller order to be picked up from this address (READY…ARRIVING, or FAILED awaiting reassignment). */
     public boolean pickupInActiveDelivery(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT TOP 1 so.id FROM seller_orders so WITH(HOLDLOCK) JOIN stores s ON s.id=so.store_id WHERE s.owner_id=? AND s.pickup_address_id=? AND so.status IN ('READY','ASSIGNED','PICKED_UP','IN_TRANSIT','ARRIVING','FAILED')", uid, id) != null;
+        return Database.one(SellerOrder.class, c, "SELECT TOP 1 so.id FROM seller_orders so WITH(HOLDLOCK) JOIN stores s ON s.id=so.store_id WHERE s.owner_id=? AND s.pickup_address_id=? AND so.status IN ('READY','ASSIGNED','PICKED_UP','IN_TRANSIT','ARRIVING','FAILED')", uid, id) != null;
     }
 
     /** The address row if it belongs to the user, otherwise null. */
-    public Map<String, Object> findById(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT * FROM addresses WHERE id=? AND user_id=?", id, uid);
+    public Address findById(Connection c, long id, long uid) throws SQLException {
+        return Database.one(Address.class, c, "SELECT * FROM addresses WHERE id=? AND user_id=?", id, uid);
     }
 
     /** Inserts the address and returns its id. */
@@ -52,12 +52,12 @@ public class AddressDAO {
     }
 
     public boolean isDefault(Connection c, long id, long uid) throws SQLException {
-        return Database.one(c, "SELECT id FROM addresses WHERE id=? AND user_id=? AND is_default=1", id, uid) != null;
+        return Database.one(Address.class, c, "SELECT id FROM addresses WHERE id=? AND user_id=? AND is_default=1", id, uid) != null;
     }
 
     /** The user's default address, or null when the address book is empty. */
-    public Map<String, Object> findDefault(Connection c, long uid) throws SQLException {
-        return Database.one(c, "SELECT * FROM addresses WHERE user_id=? AND is_default=1", uid);
+    public Address findDefault(Connection c, long uid) throws SQLException {
+        return Database.one(Address.class, c, "SELECT * FROM addresses WHERE user_id=? AND is_default=1", uid);
     }
 
     public int delete(Connection c, long id, long uid) throws SQLException {
@@ -73,7 +73,7 @@ public class AddressDAO {
     }
 
     public boolean hasDefault(Connection c, long uid) throws SQLException {
-        return Database.one(c, "SELECT id FROM addresses WHERE user_id=? AND is_default=1", uid) != null;
+        return Database.one(Address.class, c, "SELECT id FROM addresses WHERE user_id=? AND is_default=1", uid) != null;
     }
 
     /** Makes the oldest address the default one. */

@@ -8,7 +8,7 @@ public final class Validation {
 
     public static String text(String v, int max) {
         if (v == null || v.trim().isEmpty() || v.trim().length() > max) {
-            throw new IllegalArgumentException("Please complete the required fields within the allowed length.");
+            throw new IllegalArgumentException("Vui lòng nhập đủ thông tin, đúng độ dài.");
         }
         return v.trim();
     }
@@ -30,9 +30,9 @@ public final class Validation {
 
     /** Lower-case email, at most 254 characters (MSG02/MSG03/MSG04). */
     public static String email(String v) {
-        String t = field(v, 254, "email address", true).toLowerCase(Locale.ROOT);
+        String t = field(v, 254, "địa chỉ thư điện tử", true).toLowerCase(Locale.ROOT);
         if (!t.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
-            throw Messages.error(Messages.MSG04, "email address");
+            throw Messages.error(Messages.MSG04, "địa chỉ thư điện tử");
         }
         return t;
     }
@@ -42,12 +42,12 @@ public final class Validation {
         String t = v == null ? "" : v.trim().replaceAll("[\\s.\\-]", "");
         if (t.isEmpty()) {
             if (required) {
-                throw Messages.error(Messages.MSG02, "phone number");
+                throw Messages.error(Messages.MSG02, "số điện thoại");
             }
             return null;
         }
         if (!t.matches("\\+?[0-9]{7,15}")) {
-            throw Messages.error(Messages.MSG04, "phone number");
+            throw Messages.error(Messages.MSG04, "số điện thoại");
         }
         return t;
     }
@@ -60,13 +60,13 @@ public final class Validation {
             }
         } catch (Exception ignored) {
         }
-        throw new IllegalArgumentException("Invalid record ID.");
+        throw new IllegalArgumentException("Mã dữ liệu không hợp lệ.");
     }
 
     public static int quantity(String v) {
         long n = id(v);
         if (n > 10000) {
-            throw new IllegalArgumentException("The maximum quantity is 10,000.");
+            throw new IllegalArgumentException("Số lượng tối đa 10.000.");
         }
         return (int) n;
     }
@@ -79,12 +79,12 @@ public final class Validation {
             }
         } catch (Exception ignored) {
         }
-        throw new IllegalArgumentException("Invalid amount.");
+        throw new IllegalArgumentException("Số tiền không hợp lệ.");
     }
 
     public static String password(String p, String confirm) {
         if (p == null || p.length() < 8 || p.length() > 64 || p.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72 || !p.equals(confirm)) {
-            throw new IllegalArgumentException("Password must be 8–64 characters, at most 72 bytes, and match the confirmation.");
+            throw new IllegalArgumentException("Mật khẩu cần 8–64 ký tự, tối đa 72 byte, và nhập lại trùng khớp.");
         }
         return p;
     }

@@ -1,43 +1,43 @@
 <%-- Address fields shared by the edit and add forms. Expects: af (values), fid ("new" or address id), isNewForm, fe (field errors of this form or empty). --%>
 <c:set var="cityInList" value="false" />
 <c:forEach items="${serviceAreas}" var="sa"><c:if test="${sa == af.city}"><c:set var="cityInList" value="true" /></c:if></c:forEach>
-<c:set var="cityOther" value="${af.other_city or (not empty af.city and not cityInList)}" />
-<label>Recipient
-    <input class="form-control ${not empty fe.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(af.recipient_name)}" required aria-describedby="addr-${fid}-name-error" ${not empty fe.name ? 'aria-invalid="true"' : ''}>
+<c:set var="cityOther" value="${(failed and addressForm.otherCity) or (not empty af.city and not cityInList)}" />
+<label>Người nhận
+    <input class="form-control ${not empty fe.name ? 'is-invalid' : ''}" name="name" type="text" maxlength="100" value="${fn:escapeXml(af.recipientName)}" required aria-describedby="addr-${fid}-name-error" ${not empty fe.name ? 'aria-invalid="true"' : ''}>
 </label>
 <c:if test="${not empty fe.name}"><div id="addr-${fid}-name-error" class="invalid-feedback d-block"><c:out value="${fe.name}" /></div></c:if>
-<label>Phone
+<label>Số điện thoại
     <input class="form-control ${not empty fe.phone ? 'is-invalid' : ''}" name="phone" type="tel" maxlength="20" value="${fn:escapeXml(af.phone)}" required aria-describedby="addr-${fid}-phone-error" ${not empty fe.phone ? 'aria-invalid="true"' : ''}>
 </label>
 <c:if test="${not empty fe.phone}"><div id="addr-${fid}-phone-error" class="invalid-feedback d-block"><c:out value="${fe.phone}" /></div></c:if>
-<label>Address
-    <input class="form-control ${not empty fe.line ? 'is-invalid' : ''}" name="line" type="text" maxlength="255" value="${fn:escapeXml(af.address_line)}" required aria-describedby="addr-${fid}-line-error" ${not empty fe.line ? 'aria-invalid="true"' : ''}>
+<label>Địa chỉ
+    <input class="form-control ${not empty fe.line ? 'is-invalid' : ''}" name="line" type="text" maxlength="255" value="${fn:escapeXml(af.addressLine)}" required aria-describedby="addr-${fid}-line-error" ${not empty fe.line ? 'aria-invalid="true"' : ''}>
 </label>
 <c:if test="${not empty fe.line}"><div id="addr-${fid}-line-error" class="invalid-feedback d-block"><c:out value="${fe.line}" /></div></c:if>
-<label>Ward / Commune
+<label>Phường / Xã
     <input class="form-control ${not empty fe.ward ? 'is-invalid' : ''}" name="ward" type="text" maxlength="100" value="${fn:escapeXml(af.ward)}" required aria-describedby="addr-${fid}-ward-error" ${not empty fe.ward ? 'aria-invalid="true"' : ''}>
 </label>
 <c:if test="${not empty fe.ward}"><div id="addr-${fid}-ward-error" class="invalid-feedback d-block"><c:out value="${fe.ward}" /></div></c:if>
-<label>District
+<label>Quận / Huyện
     <input class="form-control ${not empty fe.district ? 'is-invalid' : ''}" name="district" type="text" maxlength="100" value="${fn:escapeXml(af.district)}" required aria-describedby="addr-${fid}-district-error" ${not empty fe.district ? 'aria-invalid="true"' : ''}>
 </label>
 <c:if test="${not empty fe.district}"><div id="addr-${fid}-district-error" class="invalid-feedback d-block"><c:out value="${fe.district}" /></div></c:if>
-<label>Province / City
+<label>Tỉnh / Thành phố
     <select class="form-control ${not empty fe.city ? 'is-invalid' : ''}" name="citySelect" data-city-select required aria-describedby="addr-${fid}-city-note addr-${fid}-city-error" ${not empty fe.city ? 'aria-invalid="true"' : ''}>
-        <option value="" ${empty af.city and not cityOther ? 'selected' : ''}>Choose a province/city</option>
+        <option value="" ${empty af.city and not cityOther ? 'selected' : ''}>Chọn tỉnh/thành phố</option>
         <c:forEach items="${serviceAreas}" var="sa">
-            <option value="${fn:escapeXml(sa)}" ${sa == af.city and not af.other_city ? 'selected' : ''}><c:out value="${sa}" /></option>
+            <option value="${fn:escapeXml(sa)}" ${sa == af.city and not (failed and addressForm.otherCity) ? 'selected' : ''}><c:out value="${sa}" /></option>
         </c:forEach>
-        <option value="__other" ${cityOther ? 'selected' : ''}>Other</option>
+        <option value="__other" ${cityOther ? 'selected' : ''}>Khác</option>
     </select>
 </label>
-<label data-city-other>Other province / city
+<label data-city-other>Tỉnh / thành phố khác
     <input class="form-control ${not empty fe.city ? 'is-invalid' : ''}" name="cityOther" type="text" maxlength="100" value="${cityOther ? fn:escapeXml(af.city) : ''}" aria-describedby="addr-${fid}-city-error">
 </label>
-<small id="addr-${fid}-city-note" class="form-text text-muted">Delivery is available only to provinces/cities in this list.</small>
+<small id="addr-${fid}-city-note" class="form-text text-muted">Chỉ hỗ trợ giao hàng đến các tỉnh/thành phố trong danh sách này.</small>
 <c:if test="${not empty fe.city}"><div id="addr-${fid}-city-error" class="invalid-feedback d-block"><c:out value="${fe.city}" /></div></c:if>
-<%-- Only a new address may be made default here; existing ones use "Set as default" (BA-04). --%>
+<%-- Only a new address may be made default here; existing ones use "Đặt làm mặc định" (BA-04). --%>
 <c:if test="${isNewForm}">
 <label>
-    <input type="checkbox" name="primary" ${af.is_default ? 'checked' : ''}> Set as default</label>
+    <input type="checkbox" name="primary" ${af.isDefault ? 'checked' : ''}> Đặt làm mặc định</label>
 </c:if>

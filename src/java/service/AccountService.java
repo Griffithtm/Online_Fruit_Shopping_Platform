@@ -1,15 +1,16 @@
 package service;
 
+import model.*;
+
 import config.DBConnect;
-import dao.AddressDAO;
-import dao.AuditDAO;
 import dao.Database;
-import dao.SettingDAO;
 import dao.UserDAO;
-import model.SessionUser;
-import org.mindrot.jbcrypt.BCrypt;
-import util.FieldErrors;
+import dao.AddressDAO;
+import dao.SettingDAO;
+import dao.AuditDAO;
 import util.Messages;
+import util.FieldErrors;
+import org.mindrot.jbcrypt.BCrypt;
 import java.sql.*;
 import java.util.*;
 import java.nio.file.*;
@@ -17,7 +18,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.*;
 
 public class AccountService {
-
     private final UserDAO users = new UserDAO();
     private final AddressDAO addressDao = new AddressDAO();
     private final AuditDAO audit = new AuditDAO();
@@ -28,41 +28,41 @@ public class AccountService {
 
     public SessionUser login(String email, String password) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT * FROM users WHERE email=? AND status='ACTIVE'", email == null ? "" : email.trim());
-            if (u == null || !matches(password, (String) u.get("password_hash"))) {
-                throw new IllegalArgumentException("Incorrect email or password.");
+            User u = Database.one(User.class, c, "SELECT * FROM users WHERE email=? AND status='ACTIVE'", email == null ? "" : email.trim());
+            if (u == null || !matches(password, u.getPasswordHash())) {
+                throw new IllegalArgumentException("Thư điện tử hoặc mật khẩu không đúng.");
             }
-            Database.update(c, "UPDATE users SET last_login_at=SYSUTCDATETIME() WHERE id=?", u.get("id"));
-            return new SessionUser(((Number) u.get("id")).longValue(), (String) u.get("full_name"), (String) u.get("role"), (String)u.get("password_hash"));
+            Database.update(c, "UPDATE users SET last_login_at=SYSUTCDATETIME() WHERE id=?", u.getId());
+            return new SessionUser(u.getId().longValue(), u.getFullName(), u.getRole(), u.getPasswordHash());
         }
     }
 
     public void register(String role, String email, String pass, String confirm, String name, String phone, String store) throws Exception {
         email = Validation.text(email, 254).toLowerCase(Locale.ROOT);
         if (!email.matches("[^\\s@]+@[^\\s@]+\\.[^\\s@]+")) {
-            throw new IllegalArgumentException("Invalid email address.");
+            throw new IllegalArgumentException("Thư điện tử không hợp lệ.");
         }
         String hash = BCrypt.hashpw(Validation.password(pass, confirm), BCrypt.gensalt(12));
         name = Validation.text(name, 100);
         phone = Validation.text(phone, 20);
         try (Connection c = new DBConnect().getConnection()) {
             if ("SELLER".equals(role)) {
-                Database.rows(c, "EXEC dbo.register_seller ?,?,?,?,?", email, hash, name, Validation.text(store, 100), phone);
+                Database.rows(RegistrationResult.class, c, "EXEC dbo.register_seller ?,?,?,?,?", email, hash, name, Validation.text(store, 100), phone);
             } else if ("CUSTOMER".equals(role)) {
-                Database.rows(c, "EXEC dbo.register_customer ?,?,?,?", email, hash, name, phone);
+                Database.rows(RegistrationResult.class, c, "EXEC dbo.register_customer ?,?,?,?", email, hash, name, phone);
             } else {
-                throw new IllegalArgumentException("Invalid account type.");
+                throw new IllegalArgumentException("Loại tài khoản không hợp lệ.");
             }
         }
     }
 
-    public Map<String, Object> profile(long id) throws Exception {
+    public User profile(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             return users.findProfile(c, id);
         }
     }
 
-    public List<Map<String, Object>> addresses(long id) throws Exception {
+    public List<Address> addresses(long id) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             return addressDao.findByUser(c, id);
         }
@@ -71,7 +71,7 @@ public class AccountService {
     /** Updates name, email and phone of the current user; returns the saved name. Errors are reported per field. */
     public String profile(long id, String name, String email, String phone) throws Exception {
         Map<String, String> errors = new LinkedHashMap<>();
-        String n = FieldErrors.check(errors, "name", () -> Validation.field(name, 100, "full name", true));
+        String n = FieldErrors.check(errors, "name", () -> Validation.field(name, 100, "họ tên", true));
         String e = FieldErrors.check(errors, "email", () -> Validation.email(email));
         String p = FieldErrors.check(errors, "phone", () -> Validation.phone(phone, false));
         FieldErrors.throwIfAny(errors);
@@ -82,9 +82,9 @@ public class AccountService {
                 if (users.emailTakenByOther(c, e, id)) {
                     throw FieldErrors.of("email", Messages.get(Messages.MSG13));
                 }
-                Map<String, Object> before = users.findProfile(c, id);
+                User before = users.findProfile(c, id);
                 users.updateProfile(c, id, n, e, p);
-                audit.log(c, id, "User", id, "PROFILE_UPDATED", profileJson(before.get("full_name"), before.get("email"), before.get("phone")), profileJson(n, e, p), null);
+                audit.log(c, id, "User", id, "PROFILE_UPDATED", profileJson(before.getFullName(), before.getEmail(), before.getPhone()), profileJson(n, e, p), null);
                 c.commit();
                 return n;
             } catch (SQLException ex) {
@@ -109,11 +109,15 @@ public class AccountService {
         return AuditDAO.json(m);
     }
 
-    private static String addressJson(Map<String, Object> a) {
+    private static String addressJson(Address a) {
         Map<String, Object> m = new LinkedHashMap<>();
-        for (String k : new String[]{"recipient_name", "phone", "address_line", "ward", "district", "city", "is_default"}) {
-            m.put(k, a.get(k));
-        }
+        m.put("recipient_name", a.getRecipientName());
+        m.put("phone", a.getPhone());
+        m.put("address_line", a.getAddressLine());
+        m.put("ward", a.getWard());
+        m.put("district", a.getDistrict());
+        m.put("city", a.getCity());
+        m.put("is_default", a.getIsDefault());
         return AuditDAO.json(m);
     }
 
@@ -124,14 +128,14 @@ public class AccountService {
     public void password(long id, String old, String pass, String confirm) throws Exception {
         Map<String, String> errors = new LinkedHashMap<>();
         if (old == null || old.isEmpty()) {
-            errors.put("old", Messages.get(Messages.MSG02, "current password"));
+            errors.put("old", Messages.get(Messages.MSG02, "mật khẩu hiện tại"));
         }
         if (pass == null || pass.isEmpty()) {
-            errors.put("password", Messages.get(Messages.MSG02, "new password"));
+            errors.put("password", Messages.get(Messages.MSG02, "mật khẩu mới"));
         } else if (pass.length() > 64) {
-            errors.put("password", Messages.get(Messages.MSG03, "new password", 64));
+            errors.put("password", Messages.get(Messages.MSG03, "mật khẩu mới", 64));
         } else if (pass.length() < 8 || pass.getBytes(StandardCharsets.UTF_8).length > 72) {
-            errors.put("password", Messages.get(Messages.MSG04, "new password (8–64 characters)"));
+            errors.put("password", Messages.get(Messages.MSG04, "mật khẩu mới (8–64 ký tự)"));
         }
         if (!Objects.equals(pass, confirm)) {
             errors.put("confirm", Messages.get(Messages.MSG16));
@@ -142,10 +146,10 @@ public class AccountService {
             try {
                 String hash = users.lockPasswordHash(c, id);
                 if (!matches(old, hash)) {
-                    throw FieldErrors.of("old", Messages.get(Messages.MSG04, "current password"));
+                    throw FieldErrors.of("old", Messages.get(Messages.MSG04, "mật khẩu hiện tại"));
                 }
                 if (matches(pass, hash)) {
-                    throw FieldErrors.of("password", Messages.get(Messages.MSG04, "new password") + " It must be different from the current password.");
+                    throw FieldErrors.of("password", Messages.get(Messages.MSG04, "mật khẩu mới") + " Mật khẩu mới phải khác mật khẩu hiện tại.");
                 }
                 users.updatePasswordHash(c, id, BCrypt.hashpw(pass, BCrypt.gensalt(12)));
                 users.invalidateResetTokens(c, id);
@@ -209,38 +213,38 @@ public class AccountService {
                     }
                 }
                 String message;
-                Map<String, Object> before = aid == null ? null : addressDao.findById(c, aid, uid);
+                Address before = aid == null ? null : addressDao.findById(c, aid, uid);
                 if (delete) {
-                    boolean wasDefault = Boolean.TRUE.equals(before.get("is_default"));
+                    boolean wasDefault = Boolean.TRUE.equals(before.getIsDefault());
                     addressDao.delete(c, aid, uid);
                     message = Messages.get(Messages.MSG81);
                     String note = null;
                     if (wasDefault) {
                         // The oldest remaining address takes over, and the user is told which one.
                         addressDao.makeFirstDefault(c, uid);
-                        Map<String, Object> next = addressDao.findDefault(c, uid);
+                        Address next = addressDao.findDefault(c, uid);
                         if (next != null) {
-                            message = Messages.get(Messages.MSG82, next.get("recipient_name") + " - " + next.get("address_line") + ", "
-                                    + next.get("ward") + ", " + next.get("district") + ", " + next.get("city"));
-                            note = "Default moved to address #" + next.get("id");
+                            message = Messages.get(Messages.MSG82, next.getRecipientName() + " - " + next.getAddressLine() + ", "
+                                    + next.getWard() + ", " + next.getDistrict() + ", " + next.getCity());
+                            note = "Default moved to address #" + next.getId();
                         }
                     }
                     audit.log(c, uid, "Address", aid, "ADDRESS_DELETED", addressJson(before), null, note);
                 } else if (action.equals("defaultAddress")) {
-                    Map<String, Object> previous = addressDao.findDefault(c, uid);
+                    Address previous = addressDao.findDefault(c, uid);
                     addressDao.clearDefault(c, uid);
                     addressDao.setDefault(c, aid, uid);
-                    audit.log(c, uid, "Address", aid, "ADDRESS_DEFAULT_SET", previous == null ? null : previous.get("id").toString(), aid.toString(), null);
+                    audit.log(c, uid, "Address", aid, "ADDRESS_DEFAULT_SET", previous == null ? null : previous.getId().toString(), aid.toString(), null);
                     message = Messages.get(Messages.MSG18);
                 } else {
                     Map<String, String> errors = new LinkedHashMap<>();
                     String n = name, p = phone, l = line, w = ward, d = district, ct = city;
-                    name = FieldErrors.check(errors, "name", () -> Validation.field(n, 100, "recipient name", true));
+                    name = FieldErrors.check(errors, "name", () -> Validation.field(n, 100, "tên người nhận", true));
                     phone = FieldErrors.check(errors, "phone", () -> Validation.phone(p, true));
-                    line = FieldErrors.check(errors, "line", () -> Validation.field(l, 255, "address", true));
-                    ward = FieldErrors.check(errors, "ward", () -> Validation.field(w, 100, "ward", true));
-                    district = FieldErrors.check(errors, "district", () -> Validation.field(d, 100, "district", true));
-                    city = FieldErrors.check(errors, "city", () -> Validation.field(ct, 100, "province/city", true));
+                    line = FieldErrors.check(errors, "line", () -> Validation.field(l, 255, "địa chỉ", true));
+                    ward = FieldErrors.check(errors, "ward", () -> Validation.field(w, 100, "phường/xã", true));
+                    district = FieldErrors.check(errors, "district", () -> Validation.field(d, 100, "quận/huyện", true));
+                    city = FieldErrors.check(errors, "city", () -> Validation.field(ct, 100, "tỉnh/thành phố", true));
                     FieldErrors.throwIfAny(errors);
                     if (aid == null) {
                         // The first address is always the default.
@@ -254,7 +258,7 @@ public class AccountService {
                         addressDao.update(c, aid, uid, name, phone, line, ward, district, city);
                         audit.log(c, uid, "Address", aid, "ADDRESS_UPDATED", addressJson(before), addressJson(addressDao.findById(c, aid, uid)), null);
                     }
-                    message = Messages.get(Messages.MSG05, "Address");
+                    message = Messages.get(Messages.MSG05, "Địa chỉ");
                 }
                 c.commit();
                 return message;
@@ -271,17 +275,17 @@ public class AccountService {
 
     public void forgot(String email) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            Map<String, Object> u = Database.one(c, "SELECT id,email FROM users WHERE email=? AND status='ACTIVE'", email);
+            User u = Database.one(User.class, c, "SELECT id,email FROM users WHERE email=? AND status='ACTIVE'", email);
             if (u == null) {
                 return;
             }
             byte[] random = new byte[32];
             new SecureRandom().nextBytes(random);
             String token = HexFormat.of().formatHex(random);
-            Database.update(c, "INSERT password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,DATEADD(minute,20,SYSUTCDATETIME()))", u.get("id"), digest(token));
+            Database.update(c, "INSERT password_reset_tokens(user_id,token_hash,expires_at) VALUES(?,?,DATEADD(minute,20,SYSUTCDATETIME()))", u.getId(), digest(token));
             String base = System.getenv().getOrDefault("FRESHORA_PUBLIC_URL", "http://localhost:9999/Freshora");
             try {
-                new MailService().recovery((String)u.get("email"),base+"/reset?token="+token);
+                new MailService().recovery(u.getEmail(),base+"/reset?token="+token);
             } catch(Exception e) {
                 Database.update(c,"DELETE FROM password_reset_tokens WHERE token_hash=?",digest(token));
                 throw e;
@@ -295,15 +299,15 @@ public class AccountService {
             c.setAutoCommit(false);
             try {
                 byte[] tokenHash=digest(token == null ? "" : token);
-                Map<String,Object> owner=Database.one(c,"SELECT user_id FROM password_reset_tokens WHERE token_hash=?",tokenHash);
-                if(owner==null) throw new IllegalArgumentException("This link has expired or has already been used.");
-                Database.one(c,"SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?",owner.get("user_id"));
-                Map<String, Object> t = Database.one(c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", tokenHash);
+                PasswordResetToken owner=Database.one(PasswordResetToken.class, c, "SELECT user_id FROM password_reset_tokens WHERE token_hash=?",tokenHash);
+                if(owner==null) throw new IllegalArgumentException("Liên kết đã hết hạn hoặc đã được sử dụng.");
+                Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?",owner.getUserId());
+                PasswordResetToken t = Database.one(PasswordResetToken.class, c, "SELECT id,user_id FROM password_reset_tokens WITH(UPDLOCK,HOLDLOCK) WHERE token_hash=? AND used_at IS NULL AND expires_at>SYSUTCDATETIME()", tokenHash);
                 if (t == null) {
-                    throw new IllegalArgumentException("This link has expired or has already been used.");
+                    throw new IllegalArgumentException("Liên kết đã hết hạn hoặc đã được sử dụng.");
                 }
-                Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), t.get("user_id"));
-                Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", t.get("user_id"));
+                Database.update(c, "UPDATE users SET password_hash=?,updated_at=SYSUTCDATETIME() WHERE id=?", BCrypt.hashpw(pass, BCrypt.gensalt(12)), t.getUserId());
+                Database.update(c, "UPDATE password_reset_tokens SET used_at=SYSUTCDATETIME() WHERE user_id=? AND used_at IS NULL", t.getUserId());
                 c.commit();
             } catch (Exception e) {
                 c.rollback();

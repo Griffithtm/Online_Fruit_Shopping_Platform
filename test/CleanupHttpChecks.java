@@ -1,3 +1,4 @@
+import model.*;
 import config.DBConnect;
 import dao.Database;
 import java.nio.file.*;

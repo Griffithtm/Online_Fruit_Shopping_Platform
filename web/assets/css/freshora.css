@@ -3,3 +3,9 @@
 @media(max-width:575px){#hero .row{--bs-gutter-x:1.5rem}.hbadge{font-size:.65rem}.hstats{gap:10px!important}}
 @media(max-width:575px){.home-page .row.g-5,footer .row.g-5{--bs-gutter-x:1.5rem}}
 .productgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}.productcard{padding:28px;border-radius:18px;background:var(--cream);box-shadow:var(--shadow)}.productcard h3{font-size:24px}.productcard a{color:var(--primary)}@media(max-width:767px){.productgrid{grid-template-columns:1fr}}
+
+/* Give Vietnamese filter labels sufficient room. */
+.filters label { max-width: none; }
+.filters select.form-select { min-width: 170px; padding-right: 38px; }
+.filters select[name="sort"] { min-width: 245px; }
+@media(max-width: 575px) { .filters label, .filters select.form-select { width: 100%; min-width: 0; } }
