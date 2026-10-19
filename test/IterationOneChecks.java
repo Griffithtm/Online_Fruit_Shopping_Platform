@@ -60,11 +60,11 @@ public class IterationOneChecks {
         check(buyerEmail.equals(saved.getEmail()),"profile: own email in upper case is saved lower case, not MSG13");
         check("0912345678".equals(saved.getPhone()),"profile: phone spaces/dots removed before saving");
         rejectWith(()->as.profile(buyer,tag,(tag+"o@test.invalid").toUpperCase(Locale.ROOT),null),util.Messages.get(util.Messages.MSG13),"profile: another user's email in different case gives MSG13");
-        rejectWith(()->as.profile(buyer,tag,buyerEmail,"abc"),"Vui lòng nhập số điện thoại hợp lệ.","profile: phone letters give MSG04");
-        rejectWith(()->as.profile(buyer,tag,buyerEmail,"123"),"Vui lòng nhập số điện thoại hợp lệ.","profile: phone shorter than 7 digits gives MSG04");
-        rejectWith(()->as.profile(buyer," ",buyerEmail,null),"Họ tên là bắt buộc.","profile: blank name gives MSG02");
-        rejectWith(()->as.profile(buyer,"x".repeat(101),buyerEmail,null),"Họ tên không được vượt quá 100 ký tự.","profile: 101-character name gives MSG03");
-        rejectWith(()->as.profile(buyer,tag,"not-an-email",null),"Vui lòng nhập địa chỉ thư điện tử hợp lệ.","profile: malformed email gives MSG04");
+        rejectWith(()->as.profile(buyer,tag,buyerEmail,"abc"),util.Messages.get(util.Messages.MSG04,"số điện thoại"),"profile: phone letters give MSG04");
+        rejectWith(()->as.profile(buyer,tag,buyerEmail,"123"),util.Messages.get(util.Messages.MSG04,"số điện thoại"),"profile: phone shorter than 7 digits gives MSG04");
+        rejectWith(()->as.profile(buyer," ",buyerEmail,null),util.Messages.get(util.Messages.MSG02,"họ tên"),"profile: blank name gives MSG02");
+        rejectWith(()->as.profile(buyer,"x".repeat(101),buyerEmail,null),util.Messages.get(util.Messages.MSG03,"họ tên",100),"profile: 101-character name gives MSG03");
+        rejectWith(()->as.profile(buyer,tag,"not-an-email",null),util.Messages.get(util.Messages.MSG04,"địa chỉ thư điện tử"),"profile: malformed email gives MSG04");
         as.profile(buyer,tag,buyerEmail,"  ");
         check(as.profile(buyer).getPhone()==null,"profile: blank phone is stored as NULL");
         // The service API has no role/points input; the servlet only reads name, email and phone,
@@ -74,9 +74,9 @@ public class IterationOneChecks {
         as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","City",false);
         check(Boolean.TRUE.equals(as.addresses(buyer).get(0).getIsDefault()),"first address automatically default");
         String msg19=util.Messages.get(util.Messages.MSG19),msg12=util.Messages.get(util.Messages.MSG12);
-        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","abc","Line","Ward","District","City",false),"Vui lòng nhập số điện thoại hợp lệ.","address: phone letters give MSG04");
-        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer"," ","Line","Ward","District","City",false),"Số điện thoại là bắt buộc.","address: blank phone gives MSG02");
-        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","",false),"Tỉnh/thành phố là bắt buộc.","address: blank province (Other left empty) gives MSG02");
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","abc","Line","Ward","District","City",false),util.Messages.get(util.Messages.MSG04,"số điện thoại"),"address: phone letters give MSG04");
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer"," ","Line","Ward","District","City",false),util.Messages.get(util.Messages.MSG02,"số điện thoại"),"address: blank phone gives MSG02");
+        rejectWith(()->as.address(buyer,"saveAddress",null,"Buyer","0900000000","Line","Ward","District","",false),util.Messages.get(util.Messages.MSG02,"tỉnh/thành phố"),"address: blank province (Other left empty) gives MSG02");
         as.address(buyer,"saveAddress",null,"Second","0900 000 001","Line 2","Ward","District","City",false);
         long usedAddress=number(as.addresses(buyer).get(0).getId()),freeAddress=number(as.addresses(buyer).get(1).getId());
         check("0900000001".equals(as.addresses(buyer).get(1).getPhone()),"address: phone normalised before saving");
@@ -115,17 +115,17 @@ public class IterationOneChecks {
         rejectWith(()->as.address(keeper,"defaultAddress",""+freeAddress,null,null,null,null,null,null,false),msg12,"default: another user's address gives MSG12");
         as.address(keeper,"saveAddress",null,"Carol","0900000012","C street","Ward","District","City",false);
         String moved=as.address(keeper,"deleteAddress",""+addrB,null,null,null,null,null,null,false);
-        check(defaultOf(keeper)==addrA && "Đã xóa địa chỉ. Alice - A street, Ward, District, City hiện là địa chỉ giao hàng mặc định của bạn.".equals(moved),"default: deleting the default makes the oldest remaining one default and says which (MSG82)");
+        check(defaultOf(keeper)==addrA && util.Messages.get(util.Messages.MSG82,"Alice - A street, Ward, District, City").equals(moved),"default: deleting the default makes the oldest remaining one default and says which (MSG82)");
         long addrC=as.addresses(keeper).stream().mapToLong(a->number(a.getId())).filter(x->x!=addrA).findFirst().getAsLong();
-        check("Đã xóa địa chỉ thành công.".equals(as.address(keeper,"deleteAddress",""+addrC,null,null,null,null,null,null,false)) && defaultOf(keeper)==addrA,"default: deleting a non-default address (MSG81)");
-        check("Đã xóa địa chỉ thành công.".equals(as.address(keeper,"deleteAddress",""+addrA,null,null,null,null,null,null,false)) && as.addresses(keeper).isEmpty(),"default: deleting the last address leaves no default");
+        check(util.Messages.get(util.Messages.MSG81).equals(as.address(keeper,"deleteAddress",""+addrC,null,null,null,null,null,null,false)) && defaultOf(keeper)==addrA,"default: deleting a non-default address (MSG81)");
+        check(util.Messages.get(util.Messages.MSG81).equals(as.address(keeper,"deleteAddress",""+addrA,null,null,null,null,null,null,false)) && as.addresses(keeper).isEmpty(),"default: deleting the last address leaves no default");
         // BA-06: password change. A user with a real BCrypt hash so login can be checked.
         String pwEmail=(tag+"p@test.invalid").toLowerCase(Locale.ROOT),oldPw="OldPass123!",newPw="NewPass456!";
         try(Connection c=open()){pwUser=Database.insert(c,"INSERT users(email,password_hash,full_name,role) VALUES(?,?,?,'CUSTOMER')",pwEmail,org.mindrot.jbcrypt.BCrypt.hashpw(oldPw,org.mindrot.jbcrypt.BCrypt.gensalt(4)),tag);}
-        rejectWith(()->as.password(pwUser,"WrongPass1!",newPw,newPw),"Vui lòng nhập mật khẩu hiện tại hợp lệ.","password: wrong current password gives MSG04");
-        rejectWith(()->as.password(pwUser,oldPw,"Short1!","Short1!"),"Vui lòng nhập mật khẩu mới (8–64 ký tự) hợp lệ.","password: 7-character new password gives MSG04");
-        rejectWith(()->as.password(pwUser,oldPw,"x".repeat(65),"x".repeat(65)),"Mật khẩu mới không được vượt quá 64 ký tự.","password: 65-character new password gives MSG03");
-        rejectWith(()->as.password(pwUser,oldPw,oldPw,oldPw),"Vui lòng nhập mật khẩu mới hợp lệ. Mật khẩu mới phải khác mật khẩu hiện tại.","password: new password equal to current is rejected");
+        rejectWith(()->as.password(pwUser,"WrongPass1!",newPw,newPw),util.Messages.get(util.Messages.MSG04,"mật khẩu hiện tại"),"password: wrong current password gives MSG04");
+        rejectWith(()->as.password(pwUser,oldPw,"Short1!","Short1!"),util.Messages.get(util.Messages.MSG04,"mật khẩu mới (8–64 ký tự)"),"password: 7-character new password gives MSG04");
+        rejectWith(()->as.password(pwUser,oldPw,"x".repeat(65),"x".repeat(65)),util.Messages.get(util.Messages.MSG03,"mật khẩu mới",64),"password: 65-character new password gives MSG03");
+        rejectWith(()->as.password(pwUser,oldPw,oldPw,oldPw),util.Messages.get(util.Messages.MSG04,"mật khẩu mới")+" Mật khẩu mới phải khác mật khẩu hiện tại.","password: new password equal to current is rejected");
         try{as.password(pwUser,oldPw,newPw,newPw+"x");throw new AssertionError("password: confirmation mismatch");}
         catch(util.FieldErrors fe){check(util.Messages.get(util.Messages.MSG16).equals(fe.getErrors().get("confirm")),"password: confirmation mismatch gives MSG16 under the confirm field");}
         check(auditCount(pwUser)==0,"audit: failed password attempts write nothing");

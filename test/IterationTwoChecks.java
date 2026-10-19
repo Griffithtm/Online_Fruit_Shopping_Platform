@@ -104,12 +104,12 @@ public class IterationTwoChecks {
    long etaOrder=checkout.place(buyer,etaAddress,UUID.randomUUID().toString(),eq.getFingerprint(),"",0,"COD");
    check(n(one("SELECT COUNT(*) n FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE so.order_id=? AND oi.batch_id<>?",etaOrder,longBatch).get("n"))==0 && n(one("SELECT reserved_qty FROM batches WHERE id=?",shortBatch).get("reserved_qty"))==0,"BA-13 reservation skips batches expiring before delivery");
    Map<String,Object> placed=one("SELECT order_code,payable_amount FROM orders WHERE id=?",etaOrder);
-   check(util.Messages.get(util.Messages.MSG39,placed.get("order_code"),new java.text.DecimalFormat("#,##0").format(placed.get("payable_amount"))+" VND").equals(checkout.placedNotice(buyer,etaOrder)),"BA-18 COD placement notice is MSG39");
+   check(util.Messages.get(util.Messages.MSG39,placed.get("order_code"),new java.text.DecimalFormat("#,##0").format(placed.get("payable_amount"))+" đ").equals(checkout.placedNotice(buyer,etaOrder)),"BA-18 COD placement notice is MSG39");
    long awaiting;try(Connection c=db()){awaiting=Database.insert(c,"INSERT orders(customer_id,order_code,status,recipient_name,recipient_phone,delivery_address,payment_method,placed_at,payment_expires_at) VALUES(?,?,'AWAITING_PAYMENT','Test','0900000000','Test address','CARD',SYSUTCDATETIME(),'2026-01-01T03:00:00')",buyer,tag+"P");}
    check(util.Messages.get(util.Messages.MSG40,tag+"P","10:00 01/01/2026").equals(checkout.placedNotice(buyer,awaiting)),"BA-18 online notice is MSG40 with the deadline in Vietnam time");
    check(checkout.placedNotice(seller,awaiting)==null,"BA-18 notice is not shown for another customer's order");
    cart.change(buyer,"add",variant,1);
-   rejectWith(()->checkout.quote(buyer,address,"NOPE"+tag.replace("-",""),0,"COD"),util.Messages.get(util.Messages.MSG37,"it is invalid or outside its validity period"),"BA-17 unknown voucher gives MSG37");
+   rejectWith(()->checkout.quote(buyer,address,"NOPE"+tag.replace("-",""),0,"COD"),util.Messages.get(util.Messages.MSG37,"mã không hợp lệ hoặc ngoài thời gian áp dụng"),"BA-17 unknown voucher gives MSG37");
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.
