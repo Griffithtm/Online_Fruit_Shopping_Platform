@@ -12,7 +12,8 @@ import java.io.*;
 import java.util.*;
 import java.sql.*;
 
-@WebServlet(urlPatterns = {"/seller/orders", "/admin/orders", "/delivery", "/seller/promotions", "/admin/promotions", "/wallet", "/refunds", "/admin/refunds"})
+// ThanhNC BA-35: "/delivery" moved to DeliveryServlet (multipart photo upload, evidence route).
+@WebServlet(urlPatterns = {"/seller/orders", "/admin/orders", "/seller/promotions", "/admin/promotions", "/wallet", "/refunds", "/admin/refunds"})
 public class CommerceServlet extends BaseServlet {
 
     private String role(HttpServletRequest r) {

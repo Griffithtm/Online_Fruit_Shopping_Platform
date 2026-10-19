@@ -287,4 +287,33 @@ public class SellerOrder {
     public void setStoreNameSnapshot(String storeNameSnapshot) {
         this.storeNameSnapshot = storeNameSnapshot;
     }
+
+    // ThanhNC 2.6a (BA-40, BA-38): delivery event times and COD collection time (UTC).
+    private java.sql.Timestamp inTransitAt;
+    private java.sql.Timestamp arrivingAt;
+    private java.sql.Timestamp codCollectedAt;
+
+    public java.sql.Timestamp getInTransitAt() {
+        return inTransitAt;
+    }
+
+    public void setInTransitAt(java.sql.Timestamp inTransitAt) {
+        this.inTransitAt = inTransitAt;
+    }
+
+    public java.sql.Timestamp getArrivingAt() {
+        return arrivingAt;
+    }
+
+    public void setArrivingAt(java.sql.Timestamp arrivingAt) {
+        this.arrivingAt = arrivingAt;
+    }
+
+    public java.sql.Timestamp getCodCollectedAt() {
+        return codCollectedAt;
+    }
+
+    public void setCodCollectedAt(java.sql.Timestamp codCollectedAt) {
+        this.codCollectedAt = codCollectedAt;
+    }
 }

@@ -55,7 +55,11 @@ public class FulfillmentService {
                 default ->
                     throw new IllegalArgumentException("Bạn không có quyền thực hiện thao tác này.");
             };
-            return Database.rows(SellerOrderDetails.class, c, "SELECT so.*,o.order_code,o.payment_method,o.recipient_name,o.recipient_phone,o.delivery_address,o.status AS order_status,s.store_name,a.address_line AS pickup_address,a.city AS pickup_city FROM seller_orders so JOIN orders o ON o.id=so.order_id JOIN stores s ON s.id=so.store_id LEFT JOIN addresses a ON a.id=s.pickup_address_id WHERE o.status<>'CART' AND " + condition + " ORDER BY so.id DESC", uid);
+            // ThanhNC BA-51: couriers do not receive settlement, commission or seller net amounts.
+            String columns = role.equals("DELIVERY_STAFF")
+                    ? "so.id,so.order_id,so.store_id,so.status,so.subtotal,so.discount_amount,so.points_discount,so.points_used,so.delivery_fee,so.cod_amount,so.cold_chain_note,so.delivery_staff_id,so.assigned_at,so.picked_up_at,so.in_transit_at,so.arriving_at,so.delivered_at,so.failed_at,so.failure_reason,so.rejection_reason,so.evidence_url,so.evidence_required,so.cod_collected_at"
+                    : "so.*";
+            return Database.rows(SellerOrderDetails.class, c, "SELECT " + columns + ",o.order_code,o.payment_method,o.recipient_name,o.recipient_phone,o.delivery_address,o.status AS order_status,s.store_name,a.address_line AS pickup_address,a.city AS pickup_city FROM seller_orders so JOIN orders o ON o.id=so.order_id JOIN stores s ON s.id=so.store_id LEFT JOIN addresses a ON a.id=s.pickup_address_id WHERE o.status<>'CART' AND " + condition + " ORDER BY so.id DESC", uid);
         }
     }
 
@@ -71,6 +75,14 @@ public class FulfillmentService {
     }
 
     public void change(long actor, String role, long sid, String action, String detail, Long courier, boolean collected) throws Exception {
+        change(actor, role, sid, action, detail, courier, collected, null);
+    }
+
+    /**
+     * ThanhNC 2.6a: {@code codAmount} is the amount the courier collected (BA-38); for "deliver", {@code detail} is the
+     * stored evidence path from DeliveryServlet or blank (BA-35). Other actions ignore {@code codAmount}.
+     */
+    public void change(long actor, String role, long sid, String action, String detail, Long courier, boolean collected, BigDecimal codAmount) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
@@ -90,6 +102,12 @@ public class FulfillmentService {
                     throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
                 }
                 String old = so.getStatus(), next;
+                // ThanhNC BA-41: a repeated confirmation by the assigned courier returns the existing outcome and writes nothing.
+                // Checked before the order-status rule because the order may already be Completed.
+                if (action.equals("deliver") && role.equals("DELIVERY_STAFF") && "DELIVERED".equals(old)) {
+                    c.commit();
+                    return;
+                }
                 if (!"CONFIRMED".equals(o.getStatus())) {
                     throw new IllegalArgumentException("Đơn hàng chưa được xác nhận để xử lý.");
                 }
@@ -120,12 +138,16 @@ public class FulfillmentService {
                         if (Database.one(Store.class, c, "SELECT id FROM stores WHERE id=? AND pickup_address_id IS NOT NULL", so.getStoreId()) == null) {
                             throw new IllegalArgumentException("Vui lòng đặt địa chỉ lấy hàng của cửa hàng trước khi bàn giao.");
                         }
+                        // ThanhNC BA-39: evidence is required for COD or when the seller order value is above the policy threshold.
+                        BigDecimal value = money(so.getSubtotal()).subtract(money(so.getDiscountAmount())).subtract(money(so.getPointsDiscount()));
+                        orders.setEvidenceRequired(c, sid, "COD".equals(o.getPaymentMethod()) || value.compareTo(BigDecimal.valueOf(policy(c, "evidence_threshold_vnd", 500000))) > 0);
                         next = "READY";
                         break;
                     case "assign":
                         require(role.equals("ADMIN") && old.equals("READY") && courier != null);
                         role(c, courier, "DELIVERY_STAFF");
-                        Database.update(c, "UPDATE seller_orders SET delivery_staff_id=?,assigned_at=SYSUTCDATETIME(),cold_chain_note=?,evidence_required=1 WHERE id=?", courier, Validation.text(detail, 255), sid);
+                        // ThanhNC BA-39: evidence_required is no longer forced to 1 here; it is decided at "ready".
+                        Database.update(c, "UPDATE seller_orders SET delivery_staff_id=?,assigned_at=SYSUTCDATETIME(),cold_chain_note=? WHERE id=?", courier, Validation.text(detail, 255), sid);
                         next = "ASSIGNED";
                         break;
                     case "pickup":
@@ -136,24 +158,39 @@ public class FulfillmentService {
                     case "transit":
                         require(role.equals("DELIVERY_STAFF") && old.equals("PICKED_UP"));
                         next = "IN_TRANSIT";
+                        orders.markInTransit(c, sid); // ThanhNC BA-40
                         break;
                     case "arrive":
                         require(role.equals("DELIVERY_STAFF") && old.equals("IN_TRANSIT"));
                         next = "ARRIVING";
+                        orders.markArriving(c, sid); // ThanhNC BA-40
                         break;
                     case "deliver":
                         require(role.equals("DELIVERY_STAFF") && old.equals("ARRIVING"));
-                        detail = evidence(detail);
-                        if ("COD".equals(o.getPaymentMethod()) && !collected) {
-                            throw new IllegalArgumentException("Vui lòng xác nhận đã thu tiền trước khi đánh dấu giao thành công.");
+                        // ThanhNC BA-35/BA-39: an uploaded photo is mandatory only when evidence_required; typed URLs are not accepted.
+                        detail = detail == null || detail.isBlank() ? null : deliveryEvidence(detail);
+                        if (Boolean.TRUE.equals(so.getEvidenceRequired()) && detail == null) {
+                            throw Messages.error(Messages.MSG60);
+                        }
+                        // ThanhNC BA-38: COD needs the exact amount due.
+                        boolean cod = "COD".equals(o.getPaymentMethod());
+                        if (cod && (codAmount == null || codAmount.compareTo(money(so.getCodAmount())) != 0)) {
+                            throw Messages.error(Messages.MSG60);
                         }
                         consume(c, sid);
                         Database.update(c, "UPDATE seller_orders SET evidence_url=?,delivered_at=SYSUTCDATETIME(),commission=ROUND(subtotal*COALESCE(commission_rate,0),2) WHERE id=?", detail, sid);
+                        if (cod) {
+                            orders.markCodCollected(c, sid);
+                        }
                         next = "DELIVERED";
                         break;
                     case "fail":
                         require(role.equals("DELIVERY_STAFF") && Set.of("ASSIGNED", "PICKED_UP", "IN_TRANSIT", "ARRIVING").contains(old));
-                        detail = Validation.text(detail, 500);
+                        // ThanhNC BA-37: a reason is required (MSG62).
+                        if (detail == null || detail.isBlank()) {
+                            throw Messages.error(Messages.MSG62);
+                        }
+                        detail = Validation.field(detail, 500, "lý do giao thất bại", true);
                         Database.update(c, "UPDATE seller_orders SET failure_reason=?,failed_at=SYSUTCDATETIME() WHERE id=?", detail, sid);
                         next = "FAILED";
                         break;
@@ -189,7 +226,8 @@ public class FulfillmentService {
                 if (next.equals("DELIVERED")) {
                     LoyaltyService.earn(c, FulfillmentService.id(o.getCustomerId()), sid, FulfillmentService.money(so.getSubtotal()).subtract(FulfillmentService.money(so.getDiscountAmount())).subtract(FulfillmentService.money(so.getPointsDiscount())));
                     if ("COD".equals(o.getPaymentMethod())) {
-                        Database.update(c, "INSERT transactions(type,user_id,order_id,seller_order_id,method,amount,status,reconciled,idempotency_key) VALUES('COD',?,?,?,'COD',?,'PAID',1,?)", o.getCustomerId(), o.getId(), sid, money(so.getSubtotal()).subtract(money(so.getDiscountAmount())).subtract(money(so.getPointsDiscount())).add(money(so.getDeliveryFee())), "cod-collected:" + sid);
+                        // ThanhNC BA-38: the ledger records the snapshotted amount due (the amount the courier confirmed).
+                        Database.update(c, "INSERT transactions(type,user_id,order_id,seller_order_id,method,amount,status,reconciled,idempotency_key) VALUES('COD',?,?,?,'COD',?,'PAID',1,?)", o.getCustomerId(), o.getId(), sid, money(so.getCodAmount()), "cod-collected:" + sid);
                     }
                 }
                 // ThanhNC BA-44: the two completion checks that were here had the same rule (every seller order final, at least one Delivered);
@@ -244,12 +282,22 @@ public class FulfillmentService {
         return url;
     }
 
+    /** ThanhNC BA-35: only a photo stored by DeliveryServlet is accepted as delivery evidence (MSG60 otherwise). */
+    public static String deliveryEvidence(String path) {
+        if (!util.EvidenceImages.validPath(path)) {
+            throw Messages.error(Messages.MSG60);
+        }
+        return path;
+    }
+
     private void consume(Connection c, long sid) throws Exception {
         for (OrderItem line : Database.rows(OrderItem.class, c, "SELECT * FROM order_items WITH(UPDLOCK,HOLDLOCK) WHERE seller_order_id=? ORDER BY batch_id,id", sid)) {
             if (!"RESERVED".equals(line.getReservationStatus())) {
                 throw new IllegalArgumentException("Đơn hàng chưa được giữ tồn kho.");
             }
-            if (Database.update(c, "UPDATE batches SET remaining_qty=remaining_qty-?,reserved_qty=reserved_qty-? WHERE id=? AND reserved_qty>=? AND remaining_qty>=? AND status='AVAILABLE' AND expiry_date>CONVERT(date,SYSUTCDATETIME())", line.getQuantity(), line.getQuantity(), line.getBatchId(), line.getQuantity(), line.getQuantity()) != 1) {
+            // ThanhNC BA-48: goods already handed over are consumed even if the batch expired meanwhile
+            // (no expiry-date check; status may be AVAILABLE or EXPIRED, any other status is still refused).
+            if (Database.update(c, "UPDATE batches SET remaining_qty=remaining_qty-?,reserved_qty=reserved_qty-? WHERE id=? AND reserved_qty>=? AND remaining_qty>=? AND status IN ('AVAILABLE','EXPIRED')", line.getQuantity(), line.getQuantity(), line.getBatchId(), line.getQuantity(), line.getQuantity()) != 1) {
                 throw new IllegalArgumentException("Không thể giao hàng từ lô đã phân bổ. Vui lòng liên hệ quản trị viên.");
             }
             Database.update(c, "UPDATE order_items SET reservation_status='CONSUMED' WHERE id=?", line.getId());

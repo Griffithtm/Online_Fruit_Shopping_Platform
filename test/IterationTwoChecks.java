@@ -33,12 +33,21 @@ public class IterationTwoChecks {
   FulfillmentService f=new FulfillmentService();f.change(sellerId,"SELLER",sid,"accept",null,null,false);
   reject(()->f.change(other==sellerId?seller:other,"SELLER",sid,"ready",null,null,false),"seller cannot change another store order");
   f.change(sellerId,"SELLER",sid,"ready",null,null,false);f.change(admin,"ADMIN",sid,"assign","Keep chilled",courier,false);
-  reject(()->f.change(courier,"DELIVERY_STAFF",sid,"deliver","https://example.invalid/evidence",null,true),"delivery cannot skip pickup and transit");
+  reject(()->f.change(courier,"DELIVERY_STAFF",sid,"deliver",photo(),null,false,codDue(sid)),"delivery cannot skip pickup and transit");
   f.change(courier,"DELIVERY_STAFF",sid,"pickup",null,null,false);f.change(courier,"DELIVERY_STAFF",sid,"transit",null,null,false);f.change(courier,"DELIVERY_STAFF",sid,"arrive",null,null,false);
-  reject(()->f.change(courier,"DELIVERY_STAFF",sid,"deliver","https://example.invalid/evidence",null,false),"COD requires collection confirmation");
-  f.change(courier,"DELIVERY_STAFF",sid,"deliver","https://example.invalid/evidence",null,true);
-  reject(()->f.change(courier,"DELIVERY_STAFF",sid,"deliver","https://example.invalid/evidence",null,true),"duplicate delivery does not consume twice");
+  // ThanhNC 2.6a (BA-38): COD now needs the exact amount (MSG60) instead of a checkbox.
+  rejectWith(()->f.change(courier,"DELIVERY_STAFF",sid,"deliver",photo(),null,false,null),util.Messages.get(util.Messages.MSG60),"COD requires collection confirmation");
+  f.change(courier,"DELIVERY_STAFF",sid,"deliver",photo(),null,false,codDue(sid));
+  // ThanhNC 2.6a (BA-41): a repeated confirmation succeeds and changes nothing.
+  long moves=n(one("SELECT COUNT(*) n FROM stock_movements m JOIN order_items oi ON oi.id=m.order_item_id WHERE oi.seller_order_id=? AND m.movement_type='CONSUME'",sid).get("n"));
+  f.change(courier,"DELIVERY_STAFF",sid,"deliver",photo(),null,false,codDue(sid));
+  check(moves==n(one("SELECT COUNT(*) n FROM stock_movements m JOIN order_items oi ON oi.id=m.order_item_id WHERE oi.seller_order_id=? AND m.movement_type='CONSUME'",sid).get("n"))
+    && n(one("SELECT COUNT(*) n FROM transactions WHERE idempotency_key=?","cod-collected:"+sid).get("n"))<=1,"repeated delivery succeeds without consuming twice");
  }
+ /** A small real PNG stored like an uploaded delivery photo (ThanhNC 2.6a). */
+ static String photo()throws Exception{java.io.ByteArrayOutputStream b=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(4,4,java.awt.image.BufferedImage.TYPE_INT_RGB),"png",b);return util.EvidenceImages.save(new java.io.ByteArrayInputStream(b.toByteArray()),b.size());}
+ /** COD amount due for a seller order (0 for online payment). */
+ static BigDecimal codDue(long sid)throws Exception{return (BigDecimal)one("SELECT cod_amount FROM seller_orders WHERE id=?",sid).get("cod_amount");}
  public static void main(String[]args)throws Exception{
   fixture();try{
    CartService cart=new CartService();CheckoutService checkout=new CheckoutService();FulfillmentService flow=new FulfillmentService();
@@ -139,6 +148,55 @@ public class IterationTwoChecks {
    check(util.Messages.get(util.Messages.MSG49,code(lateOrder,store),util.Vietnamese.label("ACCEPTED")).equals(notice(buyer,"seller-order:"+lateSid+":ACCEPTED:%")),"BA-45 other status changes use MSG49");
    check(one("SELECT id FROM notifications WHERE dedup_key LIKE ? AND dedup_key NOT LIKE ?","seller-order:"+lateSid+":ASSIGNED:[0-9]%","%:%:%:%:%")!=null,"BA-45 dedup key carries the audit id");
    try(Connection c=db()){check(!new dao.NotificationDAO().send(c,buyer,"ORDER_UPDATE","x","x","/orders","seller-order:new:"+first),"BA-45 duplicate dedup key is skipped without an error");}
+   // ---- Iteration 2.6a: courier delivery (BA-35, 37, 38, 39, 40, 41, 47, 48, 51) ----
+   String msg60=util.Messages.get(util.Messages.MSG60);
+   // A: COD order, evidence required, exact COD amount.
+   cart.change(buyer,"add",variant,1);long codOrder=place("",0,"COD"),codSid=sid(codOrder,store);
+   flow.change(seller,"SELLER",codSid,"accept",null,null,false);flow.change(seller,"SELLER",codSid,"ready",null,null,false);
+   check(Boolean.TRUE.equals(one("SELECT evidence_required FROM seller_orders WHERE id=?",codSid).get("evidence_required")),"BA-39 COD order requires evidence (decided at ready)");
+   flow.change(admin,"ADMIN",codSid,"assign","Keep chilled",courier,false);
+   check(Boolean.TRUE.equals(one("SELECT evidence_required FROM seller_orders WHERE id=?",codSid).get("evidence_required")),"BA-39 assign no longer overrides evidence_required");
+   flow.change(courier,"DELIVERY_STAFF",codSid,"pickup",null,null,false);flow.change(courier,"DELIVERY_STAFF",codSid,"transit",null,null,false);
+   check(one("SELECT in_transit_at FROM seller_orders WHERE id=?",codSid).get("in_transit_at")!=null,"BA-40 in_transit_at recorded");
+   rejectWith(()->flow.change(courier,"DELIVERY_STAFF",codSid,"fail","  ",null,false),util.Messages.get(util.Messages.MSG62),"BA-37 blank failure reason gives MSG62");
+   flow.change(courier,"DELIVERY_STAFF",codSid,"arrive",null,null,false);
+   check(one("SELECT arriving_at FROM seller_orders WHERE id=?",codSid).get("arriving_at")!=null,"BA-40 arriving_at recorded");
+   BigDecimal due=codDue(codSid);
+   rejectWith(()->flow.change(courier,"DELIVERY_STAFF",codSid,"deliver",null,null,false,due),msg60,"BA-35 missing photo when evidence is required gives MSG60");
+   rejectWith(()->flow.change(courier,"DELIVERY_STAFF",codSid,"deliver","https://example.invalid/evidence.png",null,false,due),msg60,"BA-35 a typed URL is not accepted as evidence (MSG60)");
+   rejectWith(()->flow.change(courier,"DELIVERY_STAFF",codSid,"deliver",photo(),null,false,due.add(BigDecimal.ONE)),msg60,"BA-38 wrong COD amount gives MSG60");
+   String codPhoto=photo();
+   flow.change(courier,"DELIVERY_STAFF",codSid,"deliver",codPhoto,null,false,due);
+   Map<String,Object> delivered=one("SELECT status,evidence_url,cod_collected_at FROM seller_orders WHERE id=?",codSid);
+   check("DELIVERED".equals(delivered.get("status")) && codPhoto.equals(delivered.get("evidence_url")) && delivered.get("cod_collected_at")!=null,"BA-38 exact COD amount delivers and records cod_collected_at");
+   check(((BigDecimal)one("SELECT amount FROM transactions WHERE idempotency_key=?","cod-collected:"+codSid).get("amount")).compareTo(due)==0,"BA-38 COD transaction records seller_orders.cod_amount");
+   check(codPhoto.startsWith("/delivery/evidence/") && java.nio.file.Files.isRegularFile(util.EvidenceImages.file(codPhoto)),"BA-35 photo stored as PNG outside /media and served by the delivery route");
+   try(Connection c=db()){List<Long> viewers=new dao.OrderDAO().evidenceViewers(c,codPhoto);
+     check(viewers.contains(buyer) && viewers.contains(courier) && !viewers.contains(seller),"BA-47 evidence viewers are the customer and the assigned courier (plus Admin)");}
+   flow.change(courier,"DELIVERY_STAFF",codSid,"deliver",photo(),null,false,due);
+   check(codPhoto.equals(one("SELECT evidence_url FROM seller_orders WHERE id=?",codSid).get("evidence_url")),"BA-41 repeated confirmation keeps the first photo and succeeds");
+   // B: online-paid order under the threshold: photo optional; batch expired meanwhile is still consumed (BA-48).
+   cart.change(buyer,"add",variant,1);long webOrder=place("",0,"COD"),webSid=sid(webOrder,store);
+   update("UPDATE orders SET payment_method='CARD' WHERE id=?",webOrder);update("UPDATE seller_orders SET cod_amount=0 WHERE id=?",webSid);
+   flow.change(seller,"SELLER",webSid,"accept",null,null,false);flow.change(seller,"SELLER",webSid,"ready",null,null,false);
+   check(Boolean.FALSE.equals(one("SELECT evidence_required FROM seller_orders WHERE id=?",webSid).get("evidence_required")),"BA-39 online order under the threshold does not require evidence");
+   flow.change(admin,"ADMIN",webSid,"assign","Keep chilled",courier,false);
+   for(String step:new String[]{"pickup","transit","arrive"})flow.change(courier,"DELIVERY_STAFF",webSid,step,null,null,false);
+   long webBatch=n(one("SELECT TOP 1 batch_id FROM order_items WHERE seller_order_id=?",webSid).get("batch_id"));
+   update("UPDATE batches SET status='EXPIRED' WHERE id=?",webBatch);
+   try{flow.change(courier,"DELIVERY_STAFF",webSid,"deliver",null,null,false,null);}finally{update("UPDATE batches SET status='AVAILABLE' WHERE id=?",webBatch);}
+   check("DELIVERED".equals(one("SELECT status FROM seller_orders WHERE id=?",webSid).get("status")) && one("SELECT evidence_url FROM seller_orders WHERE id=?",webSid).get("evidence_url")==null,"BA-35 photo optional when evidence is not required");
+   check("CONSUMED".equals(one("SELECT TOP 1 reservation_status FROM order_items WHERE seller_order_id=?",webSid).get("reservation_status")),"BA-48 a batch that expired during delivery is still consumed");
+   // C: value above evidence_threshold_vnd requires evidence even when paid online.
+   cart.change(buyer,"add",variant,1);long bigOrder=place("",0,"COD"),bigSid=sid(bigOrder,store);
+   update("UPDATE orders SET payment_method='CARD' WHERE id=?",bigOrder);update("UPDATE seller_orders SET cod_amount=0,subtotal=600000 WHERE id=?",bigSid);
+   flow.change(seller,"SELLER",bigSid,"accept",null,null,false);flow.change(seller,"SELLER",bigSid,"ready",null,null,false);
+   check(Boolean.TRUE.equals(one("SELECT evidence_required FROM seller_orders WHERE id=?",bigSid).get("evidence_required")),"BA-39 value above evidence_threshold_vnd requires evidence");
+   // D: courier list has no settlement data (BA-51); photo checks (BA-35).
+   check(flow.list(courier,"DELIVERY_STAFF").stream().allMatch(r->r.getCommission()==null && r.getNetPayable()==null && r.getSettlementStatus()==null),"BA-51 courier list carries no settlement, commission or seller net");
+   rejectWith(()->util.EvidenceImages.save(new java.io.ByteArrayInputStream("not an image".getBytes()),12),msg60,"BA-35 a non-image file gives MSG60");
+   rejectWith(()->util.EvidenceImages.save(new java.io.ByteArrayInputStream(new byte[1]),util.EvidenceImages.MAX_BYTES+1),msg60,"BA-35 a file over 5 MB gives MSG60");
+   check(!util.EvidenceImages.validName("../web.xml") && !util.EvidenceImages.validPath("/delivery/evidence/../x.png"),"BA-47 evidence names are UUID.png only (no path traversal)");
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.

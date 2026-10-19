@@ -701,3 +701,16 @@ END CATCH;
 EXEC sys.sp_executesql N'USE FreshoraDB;
 IF COL_LENGTH(''dbo.orders'',''cancel_deadline_at'') IS NULL ALTER TABLE dbo.orders ADD cancel_deadline_at DATETIME2 NULL;
 ';
+
+-- FE-07.2 (BA-38, BA-40, ThanhNC 2.6a): delivery event times and COD collection time.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.seller_orders'',''in_transit_at'') IS NULL ALTER TABLE dbo.seller_orders ADD in_transit_at DATETIME2 NULL;
+IF COL_LENGTH(''dbo.seller_orders'',''arriving_at'') IS NULL ALTER TABLE dbo.seller_orders ADD arriving_at DATETIME2 NULL;
+IF COL_LENGTH(''dbo.seller_orders'',''cod_collected_at'') IS NULL ALTER TABLE dbo.seller_orders ADD cod_collected_at DATETIME2 NULL;
+';
+
+-- FE-07.2 (BA-39, ThanhNC 2.6a): delivery evidence is mandatory for COD or above this seller-order value (VND).
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''evidence_threshold_vnd'')
+ INSERT settings(type,name,value) VALUES(''POLICY'',''evidence_threshold_vnd'',''500000'');
+';

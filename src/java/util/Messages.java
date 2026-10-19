@@ -18,6 +18,7 @@ public final class Messages {
             MSG32 = "MSG32", MSG33 = "MSG33", MSG34 = "MSG34", MSG35 = "MSG35", MSG36 = "MSG36",
             MSG37 = "MSG37", MSG38 = "MSG38", MSG39 = "MSG39", MSG40 = "MSG40",
             MSG47 = "MSG47", MSG48 = "MSG48", MSG49 = "MSG49", MSG61 = "MSG61", MSG63 = "MSG63",
+            MSG60 = "MSG60", MSG62 = "MSG62",
             // MSG81–82: added by FE-01.2 (BA-04); to be added to SRS III.2.
             MSG81 = "MSG81", MSG82 = "MSG82",
             // MSG83: added by FE-05.1 (BA-14, ThanhNC 2.2); to be added to SRS III.2.

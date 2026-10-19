@@ -37,6 +37,48 @@ public class OrderDAO {
         return true;
     }
 
+    /** BA-39: evidence is required for COD or above the threshold; decided when the Seller marks the order ready. */
+    public int setEvidenceRequired(Connection c, long sid, boolean required) throws SQLException {
+        return Database.update(c, "UPDATE seller_orders SET evidence_required=? WHERE id=?", required, sid);
+    }
+
+    /** BA-40: In Transit and Arriving event times. */
+    public int markInTransit(Connection c, long sid) throws SQLException {
+        return Database.update(c, "UPDATE seller_orders SET in_transit_at=SYSUTCDATETIME() WHERE id=?", sid);
+    }
+
+    public int markArriving(Connection c, long sid) throws SQLException {
+        return Database.update(c, "UPDATE seller_orders SET arriving_at=SYSUTCDATETIME() WHERE id=?", sid);
+    }
+
+    /** BA-38: when the courier recorded the exact COD amount. */
+    public int markCodCollected(Connection c, long sid) throws SQLException {
+        return Database.update(c, "UPDATE seller_orders SET cod_collected_at=SYSUTCDATETIME() WHERE id=?", sid);
+    }
+
+    /**
+     * BA-47: users who may see an evidence photo besides Admin: the customer of the order and the assigned courier.
+     * Null when no seller order uses this photo.
+     */
+    public List<Long> evidenceViewers(Connection c, String evidencePath) throws SQLException {
+        SellerOrder so = Database.one(SellerOrder.class, c, "SELECT order_id,delivery_staff_id FROM seller_orders WHERE evidence_url=?", evidencePath);
+        if (so == null) {
+            return null;
+        }
+        Order o = Database.one(Order.class, c, "SELECT customer_id FROM orders WHERE id=?", so.getOrderId());
+        List<Long> viewers = new java.util.ArrayList<>();
+        viewers.add(o.getCustomerId());
+        if (so.getDeliveryStaffId() != null) {
+            viewers.add(so.getDeliveryStaffId());
+        }
+        return viewers;
+    }
+
+    /** Seller order with its order code, current status and evidence path (for the courier's result message). */
+    public SellerOrderDetails sellerOrderHeader(Connection c, long sid) throws SQLException {
+        return Database.one(SellerOrderDetails.class, c, "SELECT so.id,so.store_id,so.status,so.evidence_url,so.failure_reason,o.order_code FROM seller_orders so JOIN orders o ON o.id=so.order_id WHERE so.id=?", sid);
+    }
+
     /** Seller orders of a placed order with their store owner, for new-order notifications (BA-14). */
     public List<SellerOrderDetails> sellerOrdersWithOwner(Connection c, long oid) throws SQLException {
         return Database.rows(SellerOrderDetails.class, c, "SELECT so.id,so.store_id,s.owner_id FROM seller_orders so JOIN stores s ON s.id=so.store_id WHERE so.order_id=? ORDER BY so.store_id,so.id", oid);
