@@ -714,3 +714,14 @@ EXEC sys.sp_executesql N'USE FreshoraDB;
 IF NOT EXISTS(SELECT 1 FROM settings WHERE type=''POLICY'' AND name=''evidence_threshold_vnd'')
  INSERT settings(type,name,value) VALUES(''POLICY'',''evidence_threshold_vnd'',''500000'');
 ';
+
+-- FE-05.3 (BA-34, ThanhNC 2.5): province/city snapshot so Sellers see only the recipient name and city.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.orders'',''delivery_city'') IS NULL ALTER TABLE dbo.orders ADD delivery_city NVARCHAR(100) NULL;
+';
+
+-- FE-05.3 (BA-32, ThanhNC 2.5): Seller packing confirmation and storage note given at handover.
+EXEC sys.sp_executesql N'USE FreshoraDB;
+IF COL_LENGTH(''dbo.seller_orders'',''packing_confirmed_at'') IS NULL ALTER TABLE dbo.seller_orders ADD packing_confirmed_at DATETIME2 NULL;
+IF COL_LENGTH(''dbo.seller_orders'',''packing_note'') IS NULL ALTER TABLE dbo.seller_orders ADD packing_note NVARCHAR(255) NULL;
+';

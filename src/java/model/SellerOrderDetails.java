@@ -98,4 +98,15 @@ public class SellerOrderDetails extends SellerOrder {
     public void setPickupCity(String pickupCity) {
         this.pickupCity = pickupCity;
     }
+
+    // ThanhNC BA-34: the only part of the delivery address a Seller sees (province/city).
+    private String deliveryCity;
+
+    public String getDeliveryCity() {
+        return deliveryCity;
+    }
+
+    public void setDeliveryCity(String deliveryCity) {
+        this.deliveryCity = deliveryCity;
+    }
 }

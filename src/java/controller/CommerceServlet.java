@@ -33,13 +33,30 @@ public class CommerceServlet extends BaseServlet {
                 r.setAttribute("refunds", new FinanceService().list(uid(r), path.startsWith("/admin")));
                 view(r, s, "refunds");
             } else {
+                FulfillmentService fulfillment = new FulfillmentService();
                 if (role(r).equals("SELLER")) {
                     r.setAttribute("pickupAddresses", new AccountService().addresses(uid(r)));
+                    // ThanhNC BA-33: status tabs and paging (10 per page); allocations only for the orders on this page.
+                    String tab = dao.OrderDAO.SELLER_TABS.containsKey(r.getParameter("status")) ? r.getParameter("status") : "";
+                    int size = 10, pages = (int) Math.max(1, (fulfillment.sellerCount(uid(r), tab) + size - 1) / size), page = 1;
+                    try {
+                        page = Math.min(pages, Math.max(1, Integer.parseInt(r.getParameter("page"))));
+                    } catch (NumberFormatException ignored) {
+                    }
+                    List<SellerOrderDetails> rows = fulfillment.sellerPage(uid(r), tab, page, size);
+                    r.setAttribute("sellerOrders", rows);
+                    r.setAttribute("allocations", fulfillment.sellerAllocations(uid(r), rows.stream().map(SellerOrderDetails::getId).toList()));
+                    r.setAttribute("sellerTab", tab);
+                    r.setAttribute("page", page);
+                    r.setAttribute("pages", pages);
+                } else {
+                    r.setAttribute("sellerOrders", fulfillment.list(uid(r), role(r)));
+                    r.setAttribute("allocations", fulfillment.allocations(uid(r), role(r)));
                 }
-                r.setAttribute("sellerOrders", new FulfillmentService().list(uid(r), role(r)));
-                r.setAttribute("allocations", new FulfillmentService().allocations(uid(r), role(r)));
                 if (role(r).equals("ADMIN"))try (Connection c = new DBConnect().getConnection()) {
                     r.setAttribute("couriers", Database.rows(User.class, c, "SELECT id,full_name FROM users WHERE role='DELIVERY_STAFF' AND status='ACTIVE'"));
+                    // ThanhNC BA-31: seller orders whose "ready" was blocked in the last 24 hours.
+                    r.setAttribute("readyBlocked", fulfillment.readyBlockedLastDay(uid(r)));
                 }
                 view(r, s, "fulfillment");
             }
@@ -95,6 +112,9 @@ public class CommerceServlet extends BaseServlet {
                 }
             } else if ("settle".equals(action)) {
                 new FinanceService().settle(uid(r), Validation.id(r.getParameter("id")));
+            } else if ("ready".equals(action) && "SELLER".equals(role(r))) {
+                // ThanhNC BA-32: packing confirmation (required) and the Seller's storage note.
+                new FulfillmentService().ready(uid(r), Validation.id(r.getParameter("id")), "on".equals(r.getParameter("packed")), r.getParameter("packingNote"));
             } else {
                 String courier = r.getParameter("courier");
                 new FulfillmentService().change(uid(r), role(r), Validation.id(r.getParameter("id")), action, r.getParameter("detail"), courier == null || courier.isBlank() ? null : Validation.id(courier), "on".equals(r.getParameter("collected")));

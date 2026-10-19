@@ -18,11 +18,13 @@ public final class Messages {
             MSG32 = "MSG32", MSG33 = "MSG33", MSG34 = "MSG34", MSG35 = "MSG35", MSG36 = "MSG36",
             MSG37 = "MSG37", MSG38 = "MSG38", MSG39 = "MSG39", MSG40 = "MSG40",
             MSG47 = "MSG47", MSG48 = "MSG48", MSG49 = "MSG49", MSG61 = "MSG61", MSG63 = "MSG63",
-            MSG60 = "MSG60", MSG62 = "MSG62", MSG46 = "MSG46",
+            MSG60 = "MSG60", MSG62 = "MSG62", MSG46 = "MSG46", MSG31 = "MSG31",
             // MSG81–82: added by FE-01.2 (BA-04); to be added to SRS III.2.
             MSG81 = "MSG81", MSG82 = "MSG82",
             // MSG83: added by FE-05.1 (BA-14, ThanhNC 2.2); to be added to SRS III.2.
-            MSG83 = "MSG83";
+            MSG83 = "MSG83",
+            // MSG84–85: added by FE-05.3 (BA-31, ThanhNC 2.5); to be added to SRS III.2.
+            MSG84 = "MSG84", MSG85 = "MSG85";
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{[a-z_]+\\}");
     private static final Map<String, String> TEXT = new HashMap<>();
@@ -113,6 +115,10 @@ public final class Messages {
         TEXT.put("MSG82", "Đã xóa địa chỉ. {address} hiện là địa chỉ giao hàng mặc định của bạn.");
         // EN (SRS III.2): New seller order {seller_order_code} is waiting for your acceptance.
         TEXT.put("MSG83", "Bạn có đơn hàng mới {seller_order_code} đang chờ tiếp nhận.");
+        // EN: Seller order {seller_order_code} cannot be marked ready: allocated batches are expired or unavailable ({batch_list}).
+        TEXT.put("MSG84", "Đơn hàng cửa hàng {seller_order_code} không thể chuyển sang sẵn sàng giao: lô đã phân bổ hết hạn hoặc không khả dụng ({batch_list}).");
+        // EN: The batches allocated to seller order {seller_order_code} are expired or unavailable. An administrator has been notified.
+        TEXT.put("MSG85", "Lô hàng đã phân bổ cho đơn {seller_order_code} đã hết hạn hoặc không khả dụng. Quản trị viên đã được thông báo.");
     }
 
     private Messages() {

@@ -45,6 +45,9 @@ public class FulfillmentService {
     public List<SellerOrderDetails> list(long uid, String role) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             role(c, uid, role);
+            if (role.equals("SELLER")) {
+                return orders.sellerAll(c, uid); // ThanhNC BA-34: no recipient phone or full address for Sellers
+            }
             String condition = switch (role) {
                 case "SELLER" ->
                     "s.owner_id=?";
@@ -57,7 +60,7 @@ public class FulfillmentService {
             };
             // ThanhNC BA-51: couriers do not receive settlement, commission or seller net amounts.
             String columns = role.equals("DELIVERY_STAFF")
-                    ? "so.id,so.order_id,so.store_id,so.status,so.subtotal,so.discount_amount,so.points_discount,so.points_used,so.delivery_fee,so.cod_amount,so.cold_chain_note,so.delivery_staff_id,so.assigned_at,so.picked_up_at,so.in_transit_at,so.arriving_at,so.delivered_at,so.failed_at,so.failure_reason,so.rejection_reason,so.evidence_url,so.evidence_required,so.cod_collected_at"
+                    ? "so.id,so.order_id,so.store_id,so.status,so.subtotal,so.discount_amount,so.points_discount,so.points_used,so.delivery_fee,so.cod_amount,so.cold_chain_note,so.delivery_staff_id,so.assigned_at,so.picked_up_at,so.in_transit_at,so.arriving_at,so.delivered_at,so.failed_at,so.failure_reason,so.rejection_reason,so.evidence_url,so.evidence_required,so.cod_collected_at,so.packing_note,so.packing_confirmed_at"
                     : "so.*";
             return Database.rows(SellerOrderDetails.class, c, "SELECT " + columns + ",o.order_code,o.payment_method,o.recipient_name,o.recipient_phone,o.delivery_address,o.status AS order_status,s.store_name,a.address_line AS pickup_address,a.city AS pickup_city FROM seller_orders so JOIN orders o ON o.id=so.order_id JOIN stores s ON s.id=so.store_id LEFT JOIN addresses a ON a.id=s.pickup_address_id WHERE o.status<>'CART' AND " + condition + " ORDER BY so.id DESC", uid);
         }
@@ -74,6 +77,45 @@ public class FulfillmentService {
         }
     }
 
+    /** ThanhNC BA-33: one page of the Seller's orders for a tab (see OrderDAO.SELLER_TABS; unknown tab = all). */
+    public List<SellerOrderDetails> sellerPage(long uid, String tab, int page, int size) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            role(c, uid, "SELLER");
+            return orders.sellerPage(c, uid, tab, page, size);
+        }
+    }
+
+    public long sellerCount(long uid, String tab) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            role(c, uid, "SELLER");
+            return orders.sellerCount(c, uid, tab);
+        }
+    }
+
+    /** ThanhNC BA-33: allocations of the seller orders shown on the current page only. */
+    public List<OrderItemDetails> sellerAllocations(long uid, List<Long> sids) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            role(c, uid, "SELLER");
+            return orders.sellerAllocations(c, uid, sids);
+        }
+    }
+
+    /** ThanhNC BA-31: "ready" attempts blocked during the last 24 hours, for the Admin fulfilment screen. */
+    public List<AuditLog> readyBlockedLastDay(long uid) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            role(c, uid, "ADMIN");
+            return orders.readyBlockedLastDay(c);
+        }
+    }
+
+    /**
+     * ThanhNC BA-32: "packed and ready" from the Seller form. Packing must be confirmed; the storage note is optional (≤ 255).
+     * Internal callers of change(..., "ready", ...) keep the earlier behaviour without the packing form.
+     */
+    public void ready(long actor, long sid, boolean packed, String packingNote) throws Exception {
+        apply(actor, "SELLER", sid, "ready", null, null, null, null, packed, packingNote);
+    }
+
     public void change(long actor, String role, long sid, String action, String detail, Long courier, boolean collected) throws Exception {
         change(actor, role, sid, action, detail, courier, collected, null);
     }
@@ -83,7 +125,7 @@ public class FulfillmentService {
      * stored evidence path from DeliveryServlet or blank (BA-35). Other actions ignore {@code codAmount}.
      */
     public void change(long actor, String role, long sid, String action, String detail, Long courier, boolean collected, BigDecimal codAmount) throws Exception {
-        apply(actor, role, sid, action, detail, courier, codAmount, null);
+        apply(actor, role, sid, action, detail, courier, codAmount, null, null, null);
     }
 
     /**
@@ -91,14 +133,14 @@ public class FulfillmentService {
      * if the order changed since then the customer gets MSG07, otherwise an ineligible cancellation gets MSG46.
      */
     public String cancelByCustomer(long actor, String role, long sid, String expectedStatus) throws Exception {
-        apply(actor, role, sid, "cancel", null, null, null, expectedStatus);
+        apply(actor, role, sid, "cancel", null, null, null, expectedStatus, null, null);
         try (Connection c = new DBConnect().getConnection()) {
             SellerOrderDetails so = orders.sellerOrderHeader(c, sid);
             return OrderCodes.sellerOrderCode(so.getOrderCode(), so.getStoreId()); // for MSG48
         }
     }
 
-    private void apply(long actor, String role, long sid, String action, String detail, Long courier, BigDecimal codAmount, String expectedStatus) throws Exception {
+    private void apply(long actor, String role, long sid, String action, String detail, Long courier, BigDecimal codAmount, String expectedStatus, Boolean packed, String packingNote) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
@@ -133,6 +175,10 @@ public class FulfillmentService {
                         throw Messages.error(Messages.MSG46);
                     }
                 }
+                // ThanhNC BA-30: a suspended store cannot accept or hand over orders (reject stays allowed to release stock and refund).
+                if (role.equals("SELLER") && !customer && Set.of("accept", "ready").contains(action) && !orders.storeActive(c, so.getStoreId())) {
+                    throw Messages.error(Messages.MSG12);
+                }
                 if (!"CONFIRMED".equals(o.getStatus())) {
                     throw new IllegalArgumentException("Đơn hàng chưa được xác nhận để xử lý.");
                 }
@@ -142,8 +188,12 @@ public class FulfillmentService {
                         next = "ACCEPTED";
                         break;
                     case "reject":
-                        require(role.equals("SELLER") && Set.of("NEW", "ACCEPTED").contains(old));
-                        detail = Validation.text(detail, 500);
+                        // ThanhNC BA-29: a Seller may reject only a New seller order, with a reason (MSG31).
+                        require(role.equals("SELLER") && old.equals("NEW"));
+                        if (detail == null || detail.isBlank()) {
+                            throw Messages.error(Messages.MSG31);
+                        }
+                        detail = Validation.field(detail, 500, "lý do từ chối", true);
                         next = "REJECTED";
                         break;
                     case "cancel":
@@ -157,11 +207,21 @@ public class FulfillmentService {
                         break;
                     case "ready":
                         require(role.equals("SELLER") && old.equals("ACCEPTED"));
-                        if (Database.one(OrderItem.class, c, "SELECT TOP 1 oi.id FROM order_items oi LEFT JOIN batches b ON b.id=oi.batch_id WHERE oi.seller_order_id=? AND (oi.reservation_status<>'RESERVED' OR b.id IS NULL OR b.status<>'AVAILABLE' OR b.expiry_date<=CONVERT(date,SYSUTCDATETIME()))", sid) != null) {
-                            throw new IllegalArgumentException("Hàng đã phân bổ không khả dụng hoặc hết hạn. Vui lòng liên hệ quản trị viên.");
+                        // ThanhNC BA-31: the blocked batches are recorded and Admins notified after this transaction rolls back.
+                        List<OrderItemDetails> blocked = orders.blockedAllocations(c, sid);
+                        if (!blocked.isEmpty()) {
+                            throw new ReadyBlocked(sid, OrderCodes.sellerOrderCode(o.getOrderCode(), so.getStoreId()), describe(blocked));
                         }
                         if (Database.one(Store.class, c, "SELECT id FROM stores WHERE id=? AND pickup_address_id IS NOT NULL", so.getStoreId()) == null) {
                             throw new IllegalArgumentException("Vui lòng đặt địa chỉ lấy hàng của cửa hàng trước khi bàn giao.");
+                        }
+                        // ThanhNC BA-32: from the Seller form, packing must be confirmed; the storage note is optional.
+                        if (packed != null) {
+                            if (!packed) {
+                                throw Messages.error(Messages.MSG02, "xác nhận đóng gói");
+                            }
+                            String note = packingNote;
+                            orders.markPacked(c, sid, Validation.field(note, 255, "ghi chú bảo quản", false));
                         }
                         // ThanhNC BA-39: evidence is required for COD or when the seller order value is above the policy threshold.
                         BigDecimal value = money(so.getSubtotal()).subtract(money(so.getDiscountAmount())).subtract(money(so.getPointsDiscount()));
@@ -265,8 +325,62 @@ public class FulfillmentService {
                 c.commit();
             } catch (Exception e) {
                 c.rollback();
+                if (e instanceof ReadyBlocked blocked) {
+                    recordReadyBlocked(actor, blocked); // ThanhNC BA-31: own transaction, after the rollback
+                }
                 throw e;
             }
+        }
+    }
+
+    /** ThanhNC BA-31: "ready" refused because allocated batches are expired or unavailable; the Seller sees MSG85. */
+    private static final class ReadyBlocked extends IllegalArgumentException {
+        final long sid;
+        final String code, batches;
+
+        ReadyBlocked(long sid, String code, String batches) {
+            super(Messages.get(Messages.MSG85, code));
+            this.sid = sid;
+            this.code = code;
+            this.batches = batches;
+        }
+    }
+
+    /** Batch list for the audit note and MSG84, e.g. "L001 (HSD 19/10/2026), chưa giữ hàng". */
+    private static String describe(List<OrderItemDetails> blocked) {
+        StringJoiner out = new StringJoiner(", ");
+        for (OrderItemDetails i : blocked) {
+            if (i.getBatchNo() == null) {
+                out.add("chưa giữ hàng");
+            } else {
+                out.add(i.getBatchNo() + (i.getExpiryDate() == null ? "" : " (HSD " + new java.text.SimpleDateFormat("dd/MM/yyyy").format(i.getExpiryDate()) + ")"));
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * ThanhNC BA-31: audit every blocked attempt and notify each active Admin at most once per seller order per day (UTC).
+     * A failure here is only logged, so the Seller still gets MSG85.
+     */
+    private void recordReadyBlocked(long actor, ReadyBlocked blocked) {
+        try (Connection c = new DBConnect().getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                audit.log(c, actor, "SellerOrder", blocked.sid, "READY_BLOCKED", "ACCEPTED", "ACCEPTED", blocked.code + ": " + blocked.batches);
+                String day = java.time.LocalDate.now(java.time.ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.BASIC_ISO_DATE);
+                String content = Messages.get(Messages.MSG84, blocked.code, blocked.batches);
+                for (User admin : notifications.activeAdmins(c)) {
+                    notifications.send(c, admin.getId(), "READY_BLOCKED", "Không thể chuyển sang sẵn sàng giao", content, "/admin/orders",
+                            "ready-blocked:" + blocked.sid + ":" + day + ":admin:" + admin.getId());
+                }
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
+            }
+        } catch (Exception e) {
+            java.util.logging.Logger.getLogger(FulfillmentService.class.getName()).log(java.util.logging.Level.WARNING, "Could not record a blocked ready attempt", e);
         }
     }
 

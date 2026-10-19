@@ -240,6 +240,60 @@ public class IterationTwoChecks {
    check("CANCELLED".equals(one("SELECT status FROM orders WHERE id=?",camp).get("status")) && n(one("SELECT used_count FROM promotions WHERE id=?",campaign).get("used_count"))==5,"BA-21 full cancellation afterwards does not return the campaign twice");
    check("RELEASED".equals(one("SELECT status FROM promotion_redemptions WHERE promotion_id=? AND order_id=?",voucherId,camp).get("status")),"BA-21 the voucher is returned only when the whole order is cancelled");
    update("UPDATE promotions SET status='ENDED' WHERE id=?",campaign);
+   // ---- Iteration 2.5: Seller fulfilment (BA-29, 30, 31, 32, 33, 34) ----
+   cart.change(buyer,"add",variant,1);long s1=place("",0,"COD"),s1Sid=sid(s1,store);
+   check(city.equals(one("SELECT delivery_city FROM orders WHERE id=?",s1).get("delivery_city")),"BA-34 placement stores the delivery province/city");
+   check(flow.list(seller,"SELLER").stream().allMatch(r->r.getRecipientPhone()==null && r.getDeliveryAddress()==null),"BA-34 Seller list carries no recipient phone or delivery address");
+   check(flow.sellerPage(seller,"",1,10).stream().allMatch(r->r.getRecipientPhone()==null && r.getDeliveryAddress()==null && r.getRecipientName()!=null),"BA-34 Seller page carries only the recipient name");
+   check(flow.sellerPage(seller,"",1,50).stream().anyMatch(r->r.getId()==s1Sid && city.equals(r.getDeliveryCity())),"BA-34 Seller sees the province/city");
+   update("UPDATE orders SET delivery_city=NULL,delivery_address=? WHERE id=?","1 Test street, Ward, District, "+city,s1);
+   check(flow.list(seller,"SELLER").stream().anyMatch(r->r.getId()==s1Sid && city.equals(r.getDeliveryCity())),"BA-34 older orders fall back to the text after the last comma (computed in SQL)");
+   check(flow.list(admin,"ADMIN").stream().anyMatch(r->r.getId()==s1Sid && r.getDeliveryAddress()!=null),"BA-34 Admin still sees the full address");
+   // BA-29: reject only New, with a reason (MSG31).
+   rejectWith(()->flow.change(seller,"SELLER",s1Sid,"reject","  ",null,false),util.Messages.get(util.Messages.MSG31),"BA-29 blank rejection reason gives MSG31");
+   flow.change(seller,"SELLER",s1Sid,"accept",null,null,false);
+   reject(()->flow.change(seller,"SELLER",s1Sid,"reject","Changed my mind",null,false),"BA-29 an Accepted seller order cannot be rejected");
+   // BA-32: packing confirmation required, note ≤ 255.
+   rejectWith(()->flow.ready(seller,s1Sid,false,null),util.Messages.get(util.Messages.MSG02,"xác nhận đóng gói"),"BA-32 ready without packing confirmation gives MSG02");
+   rejectWith(()->flow.ready(seller,s1Sid,true,"x".repeat(256)),util.Messages.get(util.Messages.MSG03,"ghi chú bảo quản",255),"BA-32 storage note over 255 characters gives MSG03");
+   // BA-31: expired allocated batch blocks ready; audit every attempt, Admin notified once per day.
+   long s1Batch=n(one("SELECT TOP 1 batch_id FROM order_items WHERE seller_order_id=?",s1Sid).get("batch_id"));
+   update("UPDATE batches SET status='EXPIRED' WHERE id=?",s1Batch);
+   try{
+     rejectWith(()->flow.ready(seller,s1Sid,true,null),util.Messages.get(util.Messages.MSG85,code(s1,store)),"BA-31 blocked ready tells the Seller MSG85");
+     reject(()->flow.ready(seller,s1Sid,true,null),"BA-31 second blocked attempt");
+   }finally{update("UPDATE batches SET status='AVAILABLE' WHERE id=?",s1Batch);}
+   check(n(one("SELECT COUNT(*) n FROM audit_logs WHERE entity_type='SellerOrder' AND entity_id=? AND action='READY_BLOCKED'",s1Sid).get("n"))==2,"BA-31 every blocked attempt is audited (own transaction after rollback)");
+   check(n(one("SELECT COUNT(*) n FROM notifications WHERE user_id=? AND dedup_key LIKE ?",admin,"ready-blocked:"+s1Sid+":%").get("n"))==1,"BA-31 Admin notified once per day per seller order");
+   check(((String)one("SELECT TOP 1 content FROM notifications WHERE user_id=? AND dedup_key LIKE ?",admin,"ready-blocked:"+s1Sid+":%").get("content")).startsWith(util.Messages.get(util.Messages.MSG84,code(s1,store),"").split("\\(")[0]),"BA-31 Admin notification uses MSG84");
+   String s1Code=code(s1,store);
+   check(flow.readyBlockedLastDay(admin).stream().anyMatch(a->a.getNote()!=null && a.getNote().startsWith(s1Code+":")),"BA-31 Admin screen lists blocked orders of the last 24 hours");
+   check("ACCEPTED".equals(one("SELECT status FROM seller_orders WHERE id=?",s1Sid).get("status")),"BA-31 blocked ready leaves the seller order Accepted");
+   flow.ready(seller,s1Sid,true,"Giữ lạnh 4°C");
+   Map<String,Object> packedRow=one("SELECT status,packing_confirmed_at,packing_note FROM seller_orders WHERE id=?",s1Sid);
+   check("READY".equals(packedRow.get("status")) && packedRow.get("packing_confirmed_at")!=null && "Giữ lạnh 4°C".equals(packedRow.get("packing_note")),"BA-32 packed and ready stores the confirmation and storage note");
+   flow.change(admin,"ADMIN",s1Sid,"assign","Keep chilled",courier,false);
+   check(flow.list(courier,"DELIVERY_STAFF").stream().anyMatch(r->r.getId()==s1Sid && "Giữ lạnh 4°C".equals(r.getPackingNote()) && "Keep chilled".equals(r.getColdChainNote())),"BA-32 courier sees the Seller note and the Admin cold-chain note");
+   // BA-30: suspended store cannot accept or mark ready; rejection stays allowed.
+   cart.change(buyer,"add",variant,1);long s2=place("",0,"COD"),s2Sid=sid(s2,store);
+   update("UPDATE stores SET status='SUSPENDED' WHERE id=?",store);
+   try{
+     rejectWith(()->flow.change(seller,"SELLER",s2Sid,"accept",null,null,false),util.Messages.get(util.Messages.MSG12),"BA-30 suspended store cannot accept (MSG12)");
+     flow.change(seller,"SELLER",s2Sid,"reject","Store suspended",null,false);
+     check("REJECTED".equals(one("SELECT status FROM seller_orders WHERE id=?",s2Sid).get("status")),"BA-30 suspended store may still reject (stock released, refund handled)");
+   }finally{update("UPDATE stores SET status='ACTIVE' WHERE id=?",store);}
+   // BA-33: tabs, paging, unpaid orders labelled, expired orders hidden, allocations limited to the page.
+   check(flow.sellerPage(seller,"NEW",1,50).stream().allMatch(r->"NEW".equals(r.getStatus())) && flow.sellerPage(seller,"SHIPPING",1,50).stream().allMatch(r->Set.of("ASSIGNED","PICKED_UP","IN_TRANSIT","ARRIVING").contains(r.getStatus())),"BA-33 status tabs filter on the server");
+   long total=flow.sellerCount(seller,"");
+   List<model.SellerOrderDetails> page1=flow.sellerPage(seller,"",1,2);
+   check(page1.size()==Math.min(2,total) && flow.sellerPage(seller,"",2,2).stream().noneMatch(r->page1.stream().anyMatch(x->x.getId().equals(r.getId()))),"BA-33 pages do not overlap (OFFSET/FETCH)");
+   cart.change(buyer,"add",variant,1);long s3=place("",0,"COD"),s3Sid=sid(s3,store);
+   update("UPDATE orders SET status='AWAITING_PAYMENT' WHERE id=?",s3);
+   check(flow.sellerPage(seller,"NEW",1,50).stream().anyMatch(r->r.getId()==s3Sid && "AWAITING_PAYMENT".equals(r.getOrderStatus())),"BA-33 unpaid online order is listed with its order status (labelled, no actions)");
+   update("UPDATE orders SET status='EXPIRED' WHERE id=?",s3);
+   check(flow.sellerPage(seller,"",1,500).stream().noneMatch(r->r.getId()==s3Sid) && flow.list(seller,"SELLER").stream().noneMatch(r->r.getId()==s3Sid),"BA-33 expired orders are hidden from the Seller");
+   check(flow.sellerAllocations(seller,List.of(s1Sid)).stream().allMatch(a->a.getSellerOrderId()==s1Sid) && !flow.sellerAllocations(seller,List.of(s1Sid)).isEmpty(),"BA-33 allocations only for the seller orders on the page");
+   check(flow.sellerAllocations(seller,List.of(second)).isEmpty(),"BA-33 allocations of another store are never returned");
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.

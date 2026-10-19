@@ -229,4 +229,15 @@ public class Order {
     public void setCancelDeadlineAt(java.sql.Timestamp cancelDeadlineAt) {
         this.cancelDeadlineAt = cancelDeadlineAt;
     }
+
+    // ThanhNC 2.5 (BA-34): province/city of the delivery address, snapshotted at placement.
+    private String deliveryCity;
+
+    public String getDeliveryCity() {
+        return deliveryCity;
+    }
+
+    public void setDeliveryCity(String deliveryCity) {
+        this.deliveryCity = deliveryCity;
+    }
 }

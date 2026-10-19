@@ -316,4 +316,24 @@ public class SellerOrder {
     public void setCodCollectedAt(java.sql.Timestamp codCollectedAt) {
         this.codCollectedAt = codCollectedAt;
     }
+
+    // ThanhNC 2.5 (BA-32): Seller packing confirmation time and storage note given at handover.
+    private java.sql.Timestamp packingConfirmedAt;
+    private String packingNote;
+
+    public java.sql.Timestamp getPackingConfirmedAt() {
+        return packingConfirmedAt;
+    }
+
+    public void setPackingConfirmedAt(java.sql.Timestamp packingConfirmedAt) {
+        this.packingConfirmedAt = packingConfirmedAt;
+    }
+
+    public String getPackingNote() {
+        return packingNote;
+    }
+
+    public void setPackingNote(String packingNote) {
+        this.packingNote = packingNote;
+    }
 }
