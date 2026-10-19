@@ -359,7 +359,9 @@ public class CheckoutService {
 
     public List<OrderSummary> orders(long uid) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            return Database.rows(OrderSummary.class, c, "SELECT o.*,(SELECT COALESCE(SUM(subtotal-discount_amount-points_discount+delivery_fee),0) FROM seller_orders WHERE order_id=o.id AND status NOT IN ('CANCELLED','REJECTED')) AS current_payable,(SELECT TOP 1 status FROM transactions WHERE order_id=o.id AND type IN ('PAYMENT','COD') ORDER BY id DESC) AS payment_status,CASE WHEN o.status='CONFIRMED' AND o.payment_method='COD' AND NOT EXISTS(SELECT 1 FROM seller_orders WHERE order_id=o.id AND status<>'NEW') THEN 1 ELSE 0 END AS cancellable FROM orders o WHERE customer_id=? AND status<>'CART' ORDER BY id DESC", uid);
+            return Database.rows(OrderSummary.class, c, "SELECT o.*,(SELECT COALESCE(SUM(subtotal-discount_amount-points_discount+delivery_fee),0) FROM seller_orders WHERE order_id=o.id AND status NOT IN ('CANCELLED','REJECTED')) AS current_payable,(SELECT TOP 1 status FROM transactions WHERE order_id=o.id AND type IN ('PAYMENT','COD') ORDER BY id DESC) AS payment_status,CASE WHEN o.status='CONFIRMED' AND SYSUTCDATETIME()<=COALESCE(o.cancel_deadline_at,DATEADD(minute,?,o.placed_at)) THEN 1 ELSE 0 END AS cancellable FROM orders o WHERE customer_id=? AND status<>'CART' ORDER BY id DESC",
+                    // ThanhNC BA-26/BA-28: "cancellable" now means the order is Confirmed and still within its cancellation deadline.
+                    FulfillmentService.policy(c, "cancellation_window_minutes", 30), uid);
         }
     }
 
@@ -369,37 +371,39 @@ public class CheckoutService {
         }
     }
 
-    public void cancel(long uid, long oid) throws Exception {
+    /**
+     * ThanhNC BA-20 (replaces the unused cancel(), BA-28): an online order still awaiting payment is cancelled as a whole,
+     * because the gateway charges the full order amount. Returns the codes of its seller orders for MSG48.
+     * A payment that still arrives later is refunded by PaymentService.callback (order no longer Awaiting Payment).
+     */
+    public List<String> cancelAwaiting(long uid, long oid) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
-                Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
-                Order o = Database.one(Order.class, c, "SELECT * FROM orders WITH(UPDLOCK,HOLDLOCK) WHERE id=? AND customer_id=?", oid, uid);
+                Order o = orders.lockOwnedOrder(c, oid, uid);
                 if (o == null) {
-                    throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
+                    throw Messages.error(Messages.MSG12);
                 }
-                if ("CANCELLED".equals(o.getStatus())) {
-                    c.commit();
-                    return;
+                List<SellerOrder> sellers = orders.lockSellerOrders(c, oid);
+                String reason = "Khách hàng hủy đơn chờ thanh toán";
+                if (orders.cancelAwaitingOrder(c, oid, reason) != 1) {
+                    throw Messages.error(Messages.MSG07); // paid, expired or cancelled meanwhile
                 }
-                if (Database.one(Order.class, c, "SELECT id FROM orders WHERE id=? AND placed_at>=DATEADD(minute,-?,SYSUTCDATETIME())", oid, FulfillmentService.policy(c, "cancellation_window_minutes", 30)) == null) {
-                    throw new IllegalArgumentException("Đã hết thời hạn cho phép hủy đơn.");
-                }
-                List<SellerOrder> sellers = Database.rows(SellerOrder.class, c, "SELECT id,status FROM seller_orders WITH(UPDLOCK,HOLDLOCK) WHERE order_id=? ORDER BY store_id,id", oid);
-                if (!"CONFIRMED".equals(o.getStatus()) || !"COD".equals(o.getPaymentMethod()) || sellers.stream().anyMatch(x -> !"NEW".equals(x.getStatus()))) {
-                    throw new IllegalArgumentException("Không thể hủy đơn hàng này nữa.");
-                }
-                if (Database.one(Transaction.class, c, "SELECT id FROM transactions WITH(UPDLOCK,HOLDLOCK) WHERE order_id=? AND status IN ('PAID','COMPLETED')", oid) != null) {
-                    throw new IllegalArgumentException("Đơn đã thanh toán cần được duyệt hoàn tiền.");
-                }
-                Database.update(c, "UPDATE orders SET status='CANCELLED',updated_at=SYSUTCDATETIME() WHERE id=?", oid);
-                Database.update(c, "UPDATE seller_orders SET status='CANCELLED',updated_at=SYSUTCDATETIME() WHERE order_id=?", oid);
                 for (SellerOrder so : sellers) {
-                    new StockReservationService().release(c, so.getId().longValue());
+                    new StockReservationService().release(c, so.getId());
                 }
-                Database.update(c, "UPDATE transactions SET status='EXPIRED',updated_at=SYSUTCDATETIME() WHERE order_id=? AND type='COD' AND status='PENDING'", oid);
+                orders.expireInitiatedPayments(c, oid);
                 BenefitsService.returnAll(c, o);
+                audit.log(c, uid, "Order", oid, "ORDER_CANCELLED", o.getStatus(), "CANCELLED", reason);
+                List<String> codes = new ArrayList<>();
+                for (SellerOrder so : sellers) {
+                    String code = OrderCodes.sellerOrderCode(o.getOrderCode(), so.getStoreId());
+                    long auditId = audit.log(c, uid, "SellerOrder", so.getId(), "cancel", so.getStatus(), "CANCELLED", reason);
+                    notifications.send(c, uid, "ORDER_UPDATE", "Cập nhật đơn hàng", Messages.get(Messages.MSG48, code), "/orders", "seller-order:" + so.getId() + ":CANCELLED:" + auditId);
+                    codes.add(code);
+                }
                 c.commit();
+                return codes;
             } catch (Exception e) {
                 c.rollback();
                 throw e;

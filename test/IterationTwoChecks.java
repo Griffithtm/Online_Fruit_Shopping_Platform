@@ -197,6 +197,49 @@ public class IterationTwoChecks {
    rejectWith(()->util.EvidenceImages.save(new java.io.ByteArrayInputStream("not an image".getBytes()),12),msg60,"BA-35 a non-image file gives MSG60");
    rejectWith(()->util.EvidenceImages.save(new java.io.ByteArrayInputStream(new byte[1]),util.EvidenceImages.MAX_BYTES+1),msg60,"BA-35 a file over 5 MB gives MSG60");
    check(!util.EvidenceImages.validName("../web.xml") && !util.EvidenceImages.validPath("/delivery/evidence/../x.png"),"BA-47 evidence names are UUID.png only (no path traversal)");
+   // ---- Iteration 2.4: cancellation (BA-20, BA-21, BA-26, BA-28) ----
+   String msg07=util.Messages.get(util.Messages.MSG07),msg46=util.Messages.get(util.Messages.MSG46);
+   // BA-26: stale page (MSG07), expired deadline / wrong status (MSG46), success returns the seller order code.
+   cart.change(buyer,"add",variant,1);long c1=place("",0,"COD"),c1Sid=sid(c1,store);
+   check(checkout.orders(buyer).stream().anyMatch(o->o.getId()==c1 && Integer.valueOf(1).equals(o.getCancellable())),"BA-26 a fresh confirmed order is cancellable (within its deadline)");
+   rejectWith(()->flow.cancelByCustomer(buyer,"CUSTOMER",c1Sid,"ACCEPTED"),msg07,"BA-26 the page showed another status → MSG07");
+   update("UPDATE orders SET cancel_deadline_at=DATEADD(minute,-1,SYSUTCDATETIME()) WHERE id=?",c1);
+   rejectWith(()->flow.cancelByCustomer(buyer,"CUSTOMER",c1Sid,"NEW"),msg46,"BA-26 cancellation after the deadline → MSG46");
+   check(checkout.orders(buyer).stream().anyMatch(o->o.getId()==c1 && Integer.valueOf(0).equals(o.getCancellable())),"BA-26/28 cancellable column is 0 once the deadline has passed");
+   update("UPDATE orders SET cancel_deadline_at=DATEADD(minute,30,SYSUTCDATETIME()) WHERE id=?",c1);
+   flow.change(seller,"SELLER",c1Sid,"accept",null,null,false);flow.change(seller,"SELLER",c1Sid,"ready",null,null,false);
+   rejectWith(()->flow.cancelByCustomer(buyer,"CUSTOMER",c1Sid,"READY"),msg46,"BA-26 a Ready seller order cannot be cancelled → MSG46");
+   cart.change(buyer,"add",variant,1);long c2=place("",0,"COD"),c2Sid=sid(c2,store);
+   check(code(c2,store).equals(flow.cancelByCustomer(buyer,"CUSTOMER",c2Sid,"NEW")) && "CANCELLED".equals(one("SELECT status FROM seller_orders WHERE id=?",c2Sid).get("status")),"BA-26 successful cancellation returns the seller order code for MSG48");
+   // BA-20: an order awaiting online payment is cancelled as a whole (simulated: COD placement turned into an unpaid card order).
+   cart.change(buyer,"add",variant,1);cart.change(buyer,"add",variant2,1);long aw=place("",0,"COD"),awSid=sid(aw,store),awSid2=sid(aw,store2);
+   update("UPDATE orders SET status='AWAITING_PAYMENT',payment_method='CARD',payment_expires_at=DATEADD(minute,15,SYSUTCDATETIME()) WHERE id=?",aw);
+   update("UPDATE transactions SET status='EXPIRED' WHERE order_id=? AND type='COD'",aw);
+   update("INSERT transactions(type,user_id,order_id,method,amount,status,provider) SELECT 'PAYMENT',customer_id,id,'CARD',payable_amount,'INITIATED','VNPAY' FROM orders WHERE id=?",aw);
+   rejectWith(()->flow.cancelByCustomer(buyer,"CUSTOMER",awSid,"NEW"),msg46,"BA-20 one seller order of an unpaid online order cannot be cancelled alone (MSG46)");
+   rejectWith(()->checkout.cancelAwaiting(other,aw),util.Messages.get(util.Messages.MSG12),"BA-20 another user cannot cancel the order (MSG12)");
+   List<String> awCodes=checkout.cancelAwaiting(buyer,aw);
+   check(awCodes.equals(List.of(code(aw,store),code(aw,store2))),"BA-20 whole-order cancellation returns every seller order code");
+   check("CANCELLED".equals(one("SELECT status FROM orders WHERE id=?",aw).get("status")) && n(one("SELECT COUNT(*) n FROM seller_orders WHERE order_id=? AND status<>'CANCELLED'",aw).get("n"))==0,"BA-20 order and all seller orders are cancelled");
+   check(n(one("SELECT COUNT(*) n FROM order_items oi JOIN seller_orders so ON so.id=oi.seller_order_id WHERE so.order_id=? AND oi.reservation_status<>'RELEASED'",aw).get("n"))==0,"BA-20 every reservation is released");
+   check("EXPIRED".equals(one("SELECT status FROM transactions WHERE order_id=? AND type='PAYMENT'",aw).get("status")),"BA-20 the open payment attempt is expired (a late payment is refunded by PaymentService)");
+   check(one("SELECT id FROM audit_logs WHERE entity_type='Order' AND entity_id=? AND action='ORDER_CANCELLED' AND old_value='AWAITING_PAYMENT'",aw)!=null,"BA-20 cancellation audited (AWAITING_PAYMENT → CANCELLED)");
+   check(util.Messages.get(util.Messages.MSG48,code(aw,store2)).equals(notice(buyer,"seller-order:"+awSid2+":CANCELLED:%")),"BA-20 customer notified with MSG48");
+   rejectWith(()->checkout.cancelAwaiting(buyer,aw),msg07,"BA-20 a second cancellation finds the order changed (MSG07)");
+   // BA-21: rejecting one seller order returns that store's campaign; the voucher stays; a later full cancellation does not return the campaign twice.
+   long campaign;try(Connection c=db()){campaign=Database.insert(c,"INSERT promotions(type,store_id,name,discount_type,discount_value,start_at,end_at,status,used_count,budget_used) VALUES('SELLER_CAMPAIGN',?,?,'PERCENT',10,DATEADD(day,-1,SYSUTCDATETIME()),DATEADD(day,30,SYSUTCDATETIME()),'RUNNING',5,50000)",store,tag+" campaign");
+     Database.update(c,"UPDATE listings SET campaign_id=? WHERE id=(SELECT listing_id FROM variants WHERE id=?)",campaign,variant);}
+   long voucherId=n(one("SELECT id FROM promotions WHERE code=?",p.get("code")).get("id"));
+   cart.change(buyer,"add",variant,1);cart.change(buyer,"add",variant2,1);long camp=place(p.get("code"),0,"COD"),campSid=sid(camp,store),campSid2=sid(camp,store2);
+   check(n(one("SELECT used_count FROM promotions WHERE id=?",campaign).get("used_count"))==6,"BA-21 campaign redeemed at placement");
+   flow.change(seller,"SELLER",campSid,"reject","Out of stock",null,false);
+   check(n(one("SELECT used_count FROM promotions WHERE id=?",campaign).get("used_count"))==5 && ((BigDecimal)one("SELECT budget_used FROM promotions WHERE id=?",campaign).get("budget_used")).compareTo(new BigDecimal("50000"))==0
+     && "RELEASED".equals(one("SELECT status FROM promotion_redemptions WHERE promotion_id=? AND order_id=?",campaign,camp).get("status")),"BA-21 rejecting one seller order returns its store campaign");
+   check("APPLIED".equals(one("SELECT status FROM promotion_redemptions WHERE promotion_id=? AND order_id=?",voucherId,camp).get("status")),"BA-21 marketplace voucher stays applied after a partial cancellation");
+   flow.cancelByCustomer(buyer,"CUSTOMER",campSid2,"NEW");
+   check("CANCELLED".equals(one("SELECT status FROM orders WHERE id=?",camp).get("status")) && n(one("SELECT used_count FROM promotions WHERE id=?",campaign).get("used_count"))==5,"BA-21 full cancellation afterwards does not return the campaign twice");
+   check("RELEASED".equals(one("SELECT status FROM promotion_redemptions WHERE promotion_id=? AND order_id=?",voucherId,camp).get("status")),"BA-21 the voucher is returned only when the whole order is cancelled");
+   update("UPDATE promotions SET status='ENDED' WHERE id=?",campaign);
    System.out.println("TEST TAG "+tag+" / "+count+" checks passed");
   }finally{
    // Keep immutable financial history. Disable only dedicated fixture users/listings.

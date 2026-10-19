@@ -79,6 +79,30 @@ public class OrderDAO {
         return Database.one(SellerOrderDetails.class, c, "SELECT so.id,so.store_id,so.status,so.evidence_url,so.failure_reason,o.order_code FROM seller_orders so JOIN orders o ON o.id=so.order_id WHERE so.id=?", sid);
     }
 
+    /** BA-20: the customer's own order, locked for the rest of the transaction (null when it is not theirs). */
+    public Order lockOwnedOrder(Connection c, long oid, long uid) throws SQLException {
+        return Database.one(Order.class, c, "SELECT * FROM orders WITH(UPDLOCK,HOLDLOCK) WHERE id=? AND customer_id=?", oid, uid);
+    }
+
+    /** Seller orders of an order, locked, in the usual lock order (store, id). */
+    public List<SellerOrder> lockSellerOrders(Connection c, long oid) throws SQLException {
+        return Database.rows(SellerOrder.class, c, "SELECT * FROM seller_orders WITH(UPDLOCK,HOLDLOCK) WHERE order_id=? ORDER BY store_id,id", oid);
+    }
+
+    /** BA-20: an unpaid online order is cancelled as a whole. Returns 1 only while it is still awaiting payment. */
+    public int cancelAwaitingOrder(Connection c, long oid, String reason) throws SQLException {
+        int n = Database.update(c, "UPDATE orders SET status='CANCELLED',updated_at=SYSUTCDATETIME() WHERE id=? AND status='AWAITING_PAYMENT'", oid);
+        if (n == 1) {
+            Database.update(c, "UPDATE seller_orders SET status='CANCELLED',rejection_reason=?,updated_at=SYSUTCDATETIME() WHERE order_id=?", reason, oid);
+        }
+        return n;
+    }
+
+    /** BA-20: open payment attempts of a cancelled order can no longer be completed (status only; amounts are immutable). */
+    public int expireInitiatedPayments(Connection c, long oid) throws SQLException {
+        return Database.update(c, "UPDATE transactions SET status='EXPIRED',updated_at=SYSUTCDATETIME() WHERE order_id=? AND type='PAYMENT' AND status='INITIATED'", oid);
+    }
+
     /** Seller orders of a placed order with their store owner, for new-order notifications (BA-14). */
     public List<SellerOrderDetails> sellerOrdersWithOwner(Connection c, long oid) throws SQLException {
         return Database.rows(SellerOrderDetails.class, c, "SELECT so.id,so.store_id,s.owner_id FROM seller_orders so JOIN stores s ON s.id=so.store_id WHERE so.order_id=? ORDER BY so.store_id,so.id", oid);

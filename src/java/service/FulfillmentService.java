@@ -83,6 +83,22 @@ public class FulfillmentService {
      * stored evidence path from DeliveryServlet or blank (BA-35). Other actions ignore {@code codAmount}.
      */
     public void change(long actor, String role, long sid, String action, String detail, Long courier, boolean collected, BigDecimal codAmount) throws Exception {
+        apply(actor, role, sid, action, detail, courier, codAmount, null);
+    }
+
+    /**
+     * ThanhNC BA-26: customer cancellation of one SellerOrder. {@code expectedStatus} is the status the page showed;
+     * if the order changed since then the customer gets MSG07, otherwise an ineligible cancellation gets MSG46.
+     */
+    public String cancelByCustomer(long actor, String role, long sid, String expectedStatus) throws Exception {
+        apply(actor, role, sid, "cancel", null, null, null, expectedStatus);
+        try (Connection c = new DBConnect().getConnection()) {
+            SellerOrderDetails so = orders.sellerOrderHeader(c, sid);
+            return OrderCodes.sellerOrderCode(so.getOrderCode(), so.getStoreId()); // for MSG48
+        }
+    }
+
+    private void apply(long actor, String role, long sid, String action, String detail, Long courier, BigDecimal codAmount, String expectedStatus) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);
             try {
@@ -108,6 +124,15 @@ public class FulfillmentService {
                     c.commit();
                     return;
                 }
+                // ThanhNC BA-26: a customer cancellation reports MSG07 when the page was stale, MSG46 when not eligible.
+                if (customer && action.equals("cancel")) {
+                    if (expectedStatus != null && !expectedStatus.equals(old)) {
+                        throw Messages.error(Messages.MSG07);
+                    }
+                    if (!"CONFIRMED".equals(o.getStatus()) || !Set.of("NEW", "ACCEPTED").contains(old)) {
+                        throw Messages.error(Messages.MSG46);
+                    }
+                }
                 if (!"CONFIRMED".equals(o.getStatus())) {
                     throw new IllegalArgumentException("Đơn hàng chưa được xác nhận để xử lý.");
                 }
@@ -125,7 +150,7 @@ public class FulfillmentService {
                         require(customer && Set.of("NEW", "ACCEPTED").contains(old));
                         // ThanhNC BA-15: compare with the deadline snapshotted at placement (old orders: placed_at + current window).
                         if (!orders.withinCancelDeadline(c, o.getId(), policy(c, "cancellation_window_minutes", 30))) {
-                            throw new IllegalArgumentException("Đã hết thời hạn cho phép hủy đơn.");
+                            throw Messages.error(Messages.MSG46); // ThanhNC BA-26
                         }
                         detail = "Khách hàng hủy đơn";
                         next = "CANCELLED";
@@ -201,6 +226,8 @@ public class FulfillmentService {
                 if (Set.of("REJECTED", "CANCELLED").contains(next)) {
                     new StockReservationService().release(c, sid);
                     BenefitsService.returnSeller(c, o, so);
+                    // ThanhNC BA-21: this store's campaign is returned now; the marketplace voucher stays with the order.
+                    BenefitsService.returnCampaign(c, o.getId(), so.getStoreId());
                     Transaction paid = Database.one(Transaction.class, c, "SELECT TOP 1 id FROM transactions WHERE order_id=? AND type='PAYMENT' AND status='PAID' ORDER BY id", o.getId());
                     if (paid != null) {
                         FinanceService.requestAutomatic(c, o, so, FulfillmentService.id(paid.getId()), detail);

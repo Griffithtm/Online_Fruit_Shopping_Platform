@@ -23,4 +23,16 @@ public class BenefitsService {
             Database.update(c, "UPDATE promotion_redemptions SET status='RELEASED' WHERE id=?", r.getId());
         }
     }
+
+    /**
+     * ThanhNC BA-21: when one SellerOrder is rejected or cancelled, return the usage and budget of that store's campaign
+     * for this order, exactly as returnAll does. The marketplace voucher stays applied to the remaining order.
+     * Released rows are no longer APPLIED, so a later returnAll for the whole order does not return them twice.
+     */
+    public static void returnCampaign(Connection c, long orderId, long storeId) throws Exception {
+        for (PromotionRedemption r : Database.rows(PromotionRedemption.class, c, "SELECT r.* FROM promotion_redemptions r WITH(UPDLOCK,HOLDLOCK) JOIN promotions p ON p.id=r.promotion_id WHERE r.order_id=? AND p.store_id=? AND p.type='SELLER_CAMPAIGN' AND r.status='APPLIED'", orderId, storeId)) {
+            Database.update(c, "UPDATE promotions SET used_count=used_count-1,budget_used=budget_used-? WHERE id=? AND used_count>0 AND budget_used>=?", r.getDiscountAmount(), r.getPromotionId(), r.getDiscountAmount());
+            Database.update(c, "UPDATE promotion_redemptions SET status='RELEASED' WHERE id=?", r.getId());
+        }
+    }
 }

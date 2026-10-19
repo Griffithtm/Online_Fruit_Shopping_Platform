@@ -40,9 +40,31 @@ public class CheckoutServlet extends BaseServlet {
                     } catch (IllegalArgumentException ignored) {
                     }
                 }
-                r.setAttribute("orders", service.orders(uid(r)));
+                Object flash = r.getSession().getAttribute("flash");
+                if (flash != null) {
+                    r.getSession().removeAttribute("flash");
+                    r.setAttribute("message", flash);
+                }
+                List<OrderSummary> orders = service.orders(uid(r));
+                List<OrderItemDetails> items = service.items(uid(r));
+                // ThanhNC BA-26: cancellation deadline in Vietnam time and MSG06 confirmations prepared for the page.
+                Map<Long, String> deadlines = new HashMap<>(), orderConfirms = new HashMap<>(), sellerConfirms = new HashMap<>();
+                for (OrderSummary o : orders) {
+                    String deadline = util.VietnamTime.format(o.getCancelDeadlineAt(), "dd/MM/yyyy HH:mm");
+                    if (deadline != null) {
+                        deadlines.put(o.getId(), deadline);
+                    }
+                    orderConfirms.put(o.getId(), Messages.get(Messages.MSG06, "hủy", "đơn hàng " + o.getOrderCode()));
+                }
+                for (OrderItemDetails i : items) {
+                    sellerConfirms.put(i.getSellerOrderId(), Messages.get(Messages.MSG06, "hủy", "đơn hàng của cửa hàng " + i.getStoreName()));
+                }
+                r.setAttribute("orders", orders);
                 r.setAttribute("payments", service.payments(uid(r)));
-                r.setAttribute("items", service.items(uid(r)));
+                r.setAttribute("items", items);
+                r.setAttribute("cancelDeadlines", deadlines);
+                r.setAttribute("orderCancelConfirms", orderConfirms);
+                r.setAttribute("sellerCancelConfirms", sellerConfirms);
                 view(r, s, "orders");
                 return;
             }
@@ -94,10 +116,18 @@ public class CheckoutServlet extends BaseServlet {
     protected void doPost(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         if (r.getServletPath().equals("/orders")) {
             try {
-                if (!"cancel".equals(r.getParameter("action"))) {
+                String action = r.getParameter("action");
+                String cancelled;
+                if ("cancel".equals(action)) {
+                    // ThanhNC BA-26: one seller order; "status" is what the page showed (MSG07 if it changed).
+                    cancelled = new FulfillmentService().cancelByCustomer(uid(r), ((model.SessionUser) r.getSession().getAttribute("user")).getRole(), Validation.id(r.getParameter("id")), r.getParameter("status"));
+                } else if ("cancelOrder".equals(action)) {
+                    // ThanhNC BA-20: the whole order while it awaits online payment.
+                    cancelled = String.join(", ", service.cancelAwaiting(uid(r), Validation.id(r.getParameter("id"))));
+                } else {
                     throw new IllegalArgumentException("Thao tác không hợp lệ.");
                 }
-                new FulfillmentService().change(uid(r), ((model.SessionUser) r.getSession().getAttribute("user")).getRole(), Validation.id(r.getParameter("id")), "cancel", null, null, false);
+                r.getSession().setAttribute("flash", Messages.get(Messages.MSG48, cancelled));
                 redirect(r, s, "/orders");
                 return;
             } catch (Exception e) {
