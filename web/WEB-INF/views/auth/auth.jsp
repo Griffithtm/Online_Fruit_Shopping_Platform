@@ -1,4 +1,4 @@
-<%@ page pageEncoding="UTF-8" %>
+    <%@ page pageEncoding="UTF-8" %>
     <%@ include file="/WEB-INF/views/header.jsp" %>
         <section class="authbox panel"><span class="eyebrow">CHÀO MỪNG ĐẾN FRESHORA</span>
             <h1><c:choose><c:when test="${mode == '/login'}">Đăng nhập</c:when><c:when test="${mode == '/forgot'}">Quên mật khẩu</c:when><c:when test="${mode == '/reset'}">Đặt lại mật khẩu</c:when><c:when test="${mode == '/register/seller'}">Đăng ký bán hàng</c:when><c:otherwise>Đăng ký khách hàng</c:otherwise></c:choose></h1>

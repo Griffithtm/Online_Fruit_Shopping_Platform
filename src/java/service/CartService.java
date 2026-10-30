@@ -66,7 +66,7 @@ public class CartService {
                 Database.update(c, "UPDATE orders SET item_total=(SELECT COALESCE(SUM(subtotal),0) FROM seller_orders WHERE order_id=?),payable_amount=(SELECT COALESCE(SUM(subtotal),0) FROM seller_orders WHERE order_id=?),updated_at=SYSUTCDATETIME() WHERE id=?", oid, oid, oid);
                 c.commit();
             } catch (Exception e) {
-                c.rollback();
+                c.rollback(); 
                 throw e;
             }
         }

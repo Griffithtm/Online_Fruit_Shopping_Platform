@@ -71,7 +71,7 @@
             if (type.indexOf('ORDER') >= 0) return ['fas fa-shopping-bag', ''];
             if (type.indexOf('PAYMENT') >= 0 || type.indexOf('REFUND') >= 0) return ['fas fa-wallet', 'gold'];
             if (type.indexOf('DELIVER') >= 0 || type.indexOf('SHIP') >= 0) return ['fas fa-truck', 'green'];
-            if (type.indexOf('STOCK') >= 0 || type.indexOf('EXPIR') >= 0) return ['fas fa-box-open', 'gold'];
+            if (type.indexOf('STOCK') >= 0 || type.indexOf('EXPIRE') >= 0) return ['fas fa-box-open', 'gold'];
             if (type.indexOf('LISTING') >= 0 || type.indexOf('REVIEW') >= 0) return ['fas fa-clipboard-check', 'green'];
             if (type.indexOf('POINT') >= 0 || type.indexOf('REWARD') >= 0) return ['fas fa-gift', 'gold'];
             return ['far fa-bell', 'blue'];

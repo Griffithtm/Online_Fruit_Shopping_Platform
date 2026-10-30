@@ -1,4 +1,4 @@
-package config;
+package listener;
 
 import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebListener;
