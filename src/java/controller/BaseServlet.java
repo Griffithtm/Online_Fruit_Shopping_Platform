@@ -15,6 +15,8 @@ public abstract class BaseServlet extends HttpServlet {
         String path = switch (name) {
             case "admin" ->
                 "admin/admin";
+            case "admin-listing-reviews" ->
+                "admin/listing-reviews";
             case "auth" ->
                 "auth/auth";
             case "seller" ->

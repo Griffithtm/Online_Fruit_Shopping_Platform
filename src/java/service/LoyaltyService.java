@@ -9,7 +9,7 @@ import java.util.*;
 import java.math.*;
 
 public class LoyaltyService {
-
+    
     public static void expire(Connection c, long uid) throws Exception {
         Database.one(User.class, c, "SELECT id FROM users WITH(UPDLOCK,HOLDLOCK) WHERE id=?", uid);
         for (Transaction t : Database.rows(Transaction.class, c, "SELECT * FROM transactions WITH(UPDLOCK,HOLDLOCK) WHERE user_id=? AND type='POINTS_EARN' AND status='AVAILABLE' AND remaining_points>0 AND points_expire_at<CONVERT(date,SYSUTCDATETIME()) ORDER BY id", uid)) {

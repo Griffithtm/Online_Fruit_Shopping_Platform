@@ -158,7 +158,7 @@ public class FinanceService {
                     throw new IllegalArgumentException("Không tìm thấy đơn hàng.");
                 }
                 Database.one(Order.class, c, "SELECT id FROM orders WITH(UPDLOCK,HOLDLOCK) WHERE id=?", ref.getOrderId());
-                SellerOrder so = Database.one(SellerOrder.class, c, "SELECT * FROM seller_orders WITH(UPDLOCK,HOLDLOCK) WHERE id=? AND status='DELIVERED' AND settlement_status='UNSETTLED' AND delivered_at<DATEADD(day,-?,SYSUTCDATETIME())", sid, FulfillmentService.policy(c, "refund_window_days", 7));
+                SellerOrder so = Database.one(SellerOrder.class, c, "SELECT * FROM seller_orders WITH(UPDLOCK,HOLDLOCK) WHERE id=? AND status='DELIVERED' AND settlement_status='UNSETTLED' AND delivered_at<DATEADD(day,-?,SYSUTCDATETIME())", sid, FulfillmentService.policy(c, "refund_window_days", 0));
                 if (so == null) {
                     throw new IllegalArgumentException("Cần hết thời hạn yêu cầu hoàn tiền trước khi quyết toán.");
                 }

@@ -83,12 +83,18 @@
                     <c:out value="${l.rejectionReason}" />
                 </td>
                 <td>
-                    <form method="post" action="">
-                        <input type="hidden" name="csrf" value="${sessionScope.csrf}">
-                        <input type="hidden" name="action" value="submit">
-                        <input type="hidden" name="id" value="${l.id}">
-                        <button class="button">Đăng bán</button>
-                    </form><a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
+                    <c:if test="${l.status == 'DRAFT' || l.status == 'SUSPENDED'}">
+                        <form method="post" action="" class="d-inline">
+                            <input type="hidden" name="csrf" value="${sessionScope.csrf}">
+                            <input type="hidden" name="action" value="submit">
+                            <input type="hidden" name="id" value="${l.id}">
+                            <button class="button">${l.status == 'SUSPENDED' ? 'Gửi yêu cầu duyệt' : 'Đăng bán'}</button>
+                        </form>
+                    </c:if>
+                    <c:if test="${l.status != 'PENDING_REVIEW' && l.status != 'RETIRED'}">
+                        <a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
+                    </c:if>
+                    <c:if test="${l.status == 'PENDING_REVIEW'}"><span class="text-muted">Đang chờ Admin duyệt</span></c:if>
                 </td>
             </tr>
         </c:forEach>
