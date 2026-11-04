@@ -19,6 +19,7 @@
                         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/style.css">
                         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/freshora.css">
                         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/notifications.css">
+                        <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/reviews.css">
                         
                     </head>
 
@@ -138,9 +139,9 @@
                         </div>
                         <main class="${homePage ? 'home-page' : 'container pagebody'}">
 <c:if test="${not homePage && not empty sessionScope.user}"><nav aria-label="Khu vực làm việc" class="d-flex flex-wrap gap-3 mb-4">
-<c:if test="${sessionScope.user.role == 'CUSTOMER' || sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/orders">Đơn hàng của tôi</a><a href="${pageContext.request.contextPath}/wallet">Điểm thưởng</a><a href="${pageContext.request.contextPath}/refunds">Yêu cầu hoàn tiền của tôi</a></c:if>
-<c:if test="${sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/seller/orders">Đơn hàng cửa hàng</a><a href="${pageContext.request.contextPath}/seller/promotions">Chiến dịch khuyến mãi</a></c:if>
-<c:if test="${sessionScope.user.role == 'ADMIN'}"><a href="${pageContext.request.contextPath}/admin/orders">Xử lý đơn hàng</a><a href="${pageContext.request.contextPath}/admin/promotions">Mã giảm giá</a><a href="${pageContext.request.contextPath}/admin/refunds">Duyệt hoàn tiền</a></c:if>
+<c:if test="${sessionScope.user.role == 'CUSTOMER' || sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/orders">Đơn hàng của tôi</a><a href="${pageContext.request.contextPath}/wallet">Điểm thưởng</a><a href="${pageContext.request.contextPath}/refunds">Yêu cầu hoàn tiền của tôi</a><a href="${pageContext.request.contextPath}/reviews">Đánh giá của tôi</a></c:if>
+<c:if test="${sessionScope.user.role == 'SELLER'}"><a href="${pageContext.request.contextPath}/seller/orders">Đơn hàng cửa hàng</a><a href="${pageContext.request.contextPath}/seller/promotions">Chiến dịch khuyến mãi</a><a href="${pageContext.request.contextPath}/reviews">Đánh giá của tôi</a></c:if>
+<c:if test="${sessionScope.user.role == 'ADMIN'}"><a href="${pageContext.request.contextPath}/admin/orders">Xử lý đơn hàng</a><a href="${pageContext.request.contextPath}/admin/promotions">Mã giảm giá</a><a href="${pageContext.request.contextPath}/admin/refunds">Duyệt hoàn tiền</a><a href="${pageContext.request.contextPath}/admin/review-reports">Báo cáo đánh giá</a></c:if>
 <c:if test="${sessionScope.user.role == 'DELIVERY_STAFF'}"><a href="${pageContext.request.contextPath}/delivery">Giao hàng</a></c:if>
 </nav></c:if>
 

@@ -1,0 +1,15 @@
+/* Freshora reviews: uses existing green/cream palette and panel/button primitives. */
+.fr-review-page{max-width:1080px;margin:2.5rem auto 4rem;padding:0 1rem}
+.fr-review-heading{margin-bottom:1.6rem}
+.fr-review-heading h1{font-weight:800;color:#254b35;margin:.35rem 0}
+.fr-review-heading p{color:#718078}
+.fr-review-card{border:1px solid #e8eee8;border-radius:16px;padding:1.35rem;margin:1rem 0;box-shadow:0 8px 24px rgba(35,70,48,.045)}
+.fr-review-product{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;border-bottom:1px solid #edf1ed;padding-bottom:1rem;margin-bottom:1rem}
+.fr-review-product h2{font-size:1.2rem;font-weight:750;margin:.25rem 0}
+.fr-review-product p{color:#718078;margin:0}
+.fr-review-status{white-space:nowrap;border-radius:999px;background:#eef6ef;color:#356344;padding:.4rem .75rem;font-size:.8rem;font-weight:700}
+.fr-review-form,.fr-moderation-form{max-width:780px}
+.fr-review-quote{background:#f7faf6;border-left:3px solid #79a77d;padding:1rem;border-radius:0 10px 10px 0;color:#425348}
+.fr-review-card .form-control,.fr-review-card .form-select{border-color:#dce6dc;border-radius:10px}
+.fr-review-card .button{border:0;border-radius:10px;padding:.65rem 1.1rem;background:#3d784b;color:#fff;font-weight:700}
+.fr-review-card .button:hover{background:#2d613a}@media(max-width:576px){.fr-review-product{display:block}.fr-review-status{display:inline-block;margin-top:.7rem}}

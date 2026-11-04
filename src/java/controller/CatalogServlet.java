@@ -3,6 +3,7 @@ package controller;
 import model.*;
 
 import service.*;
+import service.ReviewService;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 import jakarta.servlet.*;
@@ -33,6 +34,8 @@ public class CatalogServlet extends BaseServlet {
                     return;
                 }
                 r.setAttribute("product", product);
+                // Public, verified reviews for this listing; reported reviews remain visible until moderation.
+                r.setAttribute("publicReviews", new ReviewService().publicReviews(id));
                 r.setAttribute("variants", service.variants(id));
                 r.setAttribute("similar", service.products(null, product.getCategoryId().toString(), null, null, null, null, "priceDesc", false));
                 view(r, s, "product");
