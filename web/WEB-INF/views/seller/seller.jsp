@@ -84,7 +84,7 @@
                 </td>
                 <td>
                     <c:if test="${l.status == 'DRAFT' || l.status == 'SUSPENDED'}">
-                        <form method="post" action="" class="d-inline">
+                        <form method="post" action="${pageContext.request.contextPath}/seller" class="d-inline">
                             <input type="hidden" name="csrf" value="${sessionScope.csrf}">
                             <input type="hidden" name="action" value="submit">
                             <input type="hidden" name="id" value="${l.id}">
@@ -167,7 +167,7 @@
 </table>
 <section class="panel">
     <h2>Nhập kho theo lô</h2>
-    <form method="post" action="">
+    <form method="post" action="${pageContext.request.contextPath}/seller">
         <input type="hidden" name="csrf" value="${sessionScope.csrf}">
         <input type="hidden" name="action" value="stock">
         <label>Biến thể

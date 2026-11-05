@@ -35,8 +35,11 @@
             <label>Đánh giá tối thiểu
                 <select class="form-select" name="rating">
                     <option value="">Tất cả</option>
+                    <option value="5" ${param.rating == '4' ? 'selected' : ''}>5 sao</option>
                     <option value="4" ${param.rating == '4' ? 'selected' : ''}>4 sao</option>
                     <option value="3" ${param.rating == '3' ? 'selected' : ''}>3 sao</option>
+                    <option value="2" ${param.rating == '3' ? 'selected' : ''}>2 sao</option>
+                    <option value="1" ${param.rating == '3' ? 'selected' : ''}>1 sao</option>
                 </select>
             </label>
             <label>Sắp xếp
