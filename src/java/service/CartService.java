@@ -32,7 +32,7 @@ public class CartService {
                     ProductOffer v = Database.one(ProductOffer.class, c, "SELECT * FROM v_public_products WHERE variant_id=?", target);
                     if (v == null) {
                         throw new IllegalArgumentException("Sản phẩm không còn được bán.");
-                    }
+                    }   
                     SellerOrder so = Database.one(SellerOrder.class, c, "SELECT id FROM seller_orders WHERE order_id=? AND store_id=?", oid, v.getStoreId());
                     long sid = so == null ? Database.insert(c, "INSERT seller_orders(order_id,store_id) VALUES(?,?)", oid, v.getStoreId()) : so.getId().longValue();
                     OrderItem line = Database.one(OrderItem.class, c, "SELECT id,quantity FROM order_items WHERE seller_order_id=? AND variant_id=?", sid, target);

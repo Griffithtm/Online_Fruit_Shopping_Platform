@@ -41,6 +41,6 @@
                 </p>
             </section>
         </c:forEach>
-        <h2>Tổng tạm tính: <fmt:formatNumber value="${total}"/> đ</h2>
+        <h2>Tổng tiền giỏ hàng: <fmt:formatNumber value="${total}"/> đ</h2>
         <c:if test="${not empty lines}"><a class="button" href="${pageContext.request.contextPath}/checkout">Tiến hành thanh toán</a></c:if><p><a href="${pageContext.request.contextPath}/orders">Đơn hàng của tôi</a></p>
         <%@ include file="/WEB-INF/views/footer.jsp" %>

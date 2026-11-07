@@ -40,7 +40,7 @@ public class AuthServlet extends BaseServlet {
                 r.getSession().setAttribute("user", user);
                 r.getSession().setAttribute("csrf", java.util.UUID.randomUUID().toString());
                 r.getSession().setMaxInactiveInterval(1800);
-                redirect(r, s, user.getRole().equals("SELLER") ? "/seller" : user.getRole().equals("ADMIN") ? "/admin" : "/home");
+                redirect(r, s, user.getRole().equals("SELLER") ? "/seller" : user.getRole().equals("ADMIN") ? "/admin" : user.getRole().equals("DELIVERY_STAFF") ? "/delivery":"/home");
                 return;
             }
             if (p.startsWith("/register/")) {
