@@ -270,7 +270,6 @@
                                 <input type="hidden" name="csrf"
                                        value="${sessionScope.csrf}">
                                 <input type="hidden" name="id" value="${o.id}">
-
                                 <%-- Seller --%>
                                 <c:if test="${sessionScope.user.role == 'SELLER'}">
 
@@ -407,8 +406,9 @@
                             </form>
                         </div>
                     </c:if>
-
+                    
                     <%-- Quyết toán --%>
+                    <c:if test="${sessionScope.user.role == 'ADMIN'}||${sessionScope.user.role == 'SELLER'}">
                     <div class="settlement-area">
                         <div class="settlement-heading">
                             <i class="fas fa-file-invoice-dollar"></i>
@@ -437,6 +437,7 @@
                                 </strong>
                             </div>
                         </div>
+                    </c:if>
 
                         <c:if test="${sessionScope.user.role == 'ADMIN' && o.status == 'DELIVERED' && o.settlementStatus == 'UNSETTLED'}">
                             <form method="post" class="settlement-form">

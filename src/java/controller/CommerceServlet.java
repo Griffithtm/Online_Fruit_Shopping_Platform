@@ -100,6 +100,7 @@ public class CommerceServlet extends BaseServlet {
             }
             redirect(r, s, r.getServletPath() + "?saved=1");
         } catch (Exception e) {
+            r.setAttribute("saved", false);
             r.setAttribute("error", error(e));
             doGet(r, s);
         }
