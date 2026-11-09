@@ -10,7 +10,7 @@ public final class Validation {
         if (v == null || v.trim().isEmpty() || v.trim().length() > max) {
             throw new IllegalArgumentException("Vui lòng nhập đủ thông tin, đúng độ dài.");
         }
-        return v.trim();
+        return v.trim().replaceAll("\\s+", " ");
     }
 
     /** Trimmed text checked against MSG02/MSG03 for {@code field}; an optional blank value returns null. */
