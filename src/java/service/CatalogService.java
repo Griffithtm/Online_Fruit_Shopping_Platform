@@ -57,7 +57,7 @@ public class CatalogService {
             a.add(Validation.money(rating, true));
         }
         if (promo) {
-            sql += " AND EXISTS(SELECT 1 FROM promotions pr WHERE pr.id=l.campaign_id AND pr.status='RUNNING' AND pr.start_at<=SYSUTCDATETIME() AND pr.end_at>SYSUTCDATETIME())";
+            sql += " AND EXISTS(SELECT 1 FROM promotions pr WHERE pr.id=l.campaign_id AND pr.status IN ('RUNNING','SCHEDULED') AND pr.start_at<=SYSUTCDATETIME() AND pr.end_at>SYSUTCDATETIME())";
         }
         sql += " ORDER BY " + switch (sort == null ? "" : sort) {
             case "priceAsc" ->

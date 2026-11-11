@@ -23,12 +23,16 @@ public class SellerServlet extends BaseServlet {
             r.setAttribute("variants", service.variants(uid(r)));
             r.setAttribute("batches", service.batches(uid(r)));
             r.setAttribute("categories", new CatalogService().categories());
-            r.setAttribute("suggestions", service.suggestions(uid(r),r.getParameter("q")));
+            r.setAttribute("suggestions", service.suggestions(uid(r), r.getParameter("q")));
             if (r.getParameter("images") != null) {
                 r.setAttribute("images", service.images(uid(r), Validation.id(r.getParameter("images"))));
             }
-            if(r.getParameter("editListing")!=null) r.setAttribute("editListing", service.listings(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editListing"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin đăng.")));
-            if(r.getParameter("editVariant")!=null) r.setAttribute("editVariant", service.variants(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editVariant"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Biến thể không tồn tại.")));
+            if (r.getParameter("editListing") != null) {
+                r.setAttribute("editListing", service.listings(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editListing"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Không tìm thấy tin đăng.")));
+            }
+            if (r.getParameter("editVariant") != null) {
+                r.setAttribute("editVariant", service.variants(uid(r)).stream().filter(x -> x.getId().toString().equals(r.getParameter("editVariant"))).findFirst().orElseThrow(() -> new IllegalArgumentException("Biến thể không tồn tại.")));
+            }
             view(r, s, "seller");
         } catch (Exception e) {
             r.setAttribute("error", error(e));
@@ -45,6 +49,8 @@ public class SellerServlet extends BaseServlet {
                     service.listing(uid(r), id, r.getParameter("title"), r.getParameter("description"), r.getParameter("category"), r.getParameter("origin"), r.getParameter("harvest"));
                 case "submit" ->
                     service.submit(uid(r), Validation.id(id));
+                case "retireListing" ->
+                    service.retireListing(uid(r), Validation.id(id));
                 case "variant", "retire" ->
                     service.variant(uid(r), id, Validation.id(r.getParameter("listing")), r.getParameter("option"), r.getParameter("unit"), r.getParameter("price"), a.equals("retire"));
                 case "stock" ->

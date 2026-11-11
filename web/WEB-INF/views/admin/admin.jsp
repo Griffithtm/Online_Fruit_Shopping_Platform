@@ -18,7 +18,7 @@
                     <h3>#${l.id} <c:out value="${l.title}"/></h3>
                     <p><strong>Cửa hàng:</strong> <c:out value="${l.storeName}"/></p>
                     <p><c:out value="${l.description}"/></p>
-                    <a href="${pageContext.request.contextPath}/product?id=${l.id}" target="_blank" rel="noopener">Xem chi tiết sản phẩm ↗</a>
+                    
                     <p class="small text-muted">Gửi duyệt lúc: <fmt:formatDate value="${l.updatedAt}" pattern="dd/MM/yyyy HH:mm"/></p>
                 </div>
             </div>

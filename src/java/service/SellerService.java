@@ -11,13 +11,19 @@ import java.math.BigDecimal;
 
 public class SellerService {
 
-    public List<ProductOffer> suggestions(long uid,String query) throws Exception {
-        if(query==null || query.trim().length()<2) return List.of();
-        if(query.length()>200) throw new IllegalArgumentException("Tên sản phẩm quá dài.");
+    public List<ProductOffer> suggestions(long uid, String query) throws Exception {
+        if (query == null || query.trim().length() < 2) {
+            return List.of();
+        }
+        if (query.length() > 200) {
+            throw new IllegalArgumentException("Tên sản phẩm quá dài.");
+        }
         long own;
-        try(Connection c=new DBConnect().getConnection()){own=store(c,uid);}
-        return new CatalogService().products(query,null,null,null,null,null,"priceDesc",false).stream()
-            .filter(x -> x.getStoreId().longValue()!=own).limit(10).toList();
+        try (Connection c = new DBConnect().getConnection()) {
+            own = store(c, uid);
+        }
+        return new CatalogService().products(query, null, null, null, null, null, "priceDesc", false).stream()
+                .filter(x -> x.getStoreId().longValue() != own).limit(10).toList();
     }
 
     public long store(Connection c, long uid) throws Exception {
@@ -67,10 +73,40 @@ public class SellerService {
             long sid = store(c, uid);
             // A suspended listing must be resubmitted for admin review; it must never
             // become public directly from the seller workspace.
-            if (Database.update(c, "UPDATE listings SET status='PENDING_REVIEW',updated_at=SYSUTCDATETIME() WHERE id=? AND store_id=? AND status='SUSPENDED' AND EXISTS(SELECT 1 FROM variants WHERE listing_id=listings.id AND status='ACTIVE')", id, sid) == 1) return;
+            if (Database.update(c, "UPDATE listings SET status='PENDING_REVIEW',updated_at=SYSUTCDATETIME() WHERE id=? AND store_id=? AND status='SUSPENDED' AND EXISTS(SELECT 1 FROM variants WHERE listing_id=listings.id AND status='ACTIVE')", id, sid) == 1) {
+                return;
+            }
             // New draft listings keep the existing automatic-publication workflow.
             if (Database.update(c, "UPDATE listings SET status='PUBLISHED',rejection_reason=NULL,updated_at=SYSUTCDATETIME() WHERE id=? AND store_id=? AND status='DRAFT' AND EXISTS(SELECT 1 FROM variants WHERE listing_id=listings.id AND status='ACTIVE')", id, sid) != 1) {
                 throw new IllegalArgumentException("Cần có ít nhất một biến thể đang hoạt động. Tin bị đình chỉ phải gửi yêu cầu duyệt; tin mới ở trạng thái Bản nháp có thể đăng bán trực tiếp.");
+            }
+        }
+    }
+
+    public void retireListing(long uid, long listingId) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            long sid = store(c, uid);
+
+            int updated = Database.update(
+                    c,
+                    """
+            UPDATE listings
+            SET status = 'RETIRED',
+                updated_at = SYSUTCDATETIME()
+            WHERE id = ?
+              AND store_id = ?
+              AND status IN ('DRAFT', 'PUBLISHED', 'SUSPENDED')
+            """,
+                    listingId,
+                    sid
+            );
+
+            if (updated != 1) {
+                throw new IllegalArgumentException(
+                        "Không thể ngừng kinh doanh sản phẩm này. "
+                        + "Sản phẩm không tồn tại, không thuộc cửa hàng "
+                        + "hoặc đang chờ Admin duyệt."
+                );
             }
         }
     }
@@ -79,9 +115,12 @@ public class SellerService {
         try (Connection c = new DBConnect().getConnection()) {
             long sid = store(c, uid);
             Listing ownedListing = Database.one(Listing.class, c, "SELECT * FROM listings WHERE id=? AND store_id=?", listing, sid);
-            if (ownedListing == null) throw new IllegalArgumentException("Tin đăng không thuộc cửa hàng.");
-            if ("PENDING_REVIEW".equals(ownedListing.getStatus()))
+            if (ownedListing == null) {
+                throw new IllegalArgumentException("Tin đăng không thuộc cửa hàng.");
+            }
+            if ("PENDING_REVIEW".equals(ownedListing.getStatus())) {
                 throw new IllegalArgumentException("Tin đăng đang chờ Admin duyệt, không thể chỉnh sửa biến thể lúc này.");
+            }
             if (retire) {
                 if (Database.update(c, "UPDATE variants SET status='RETIRED',updated_at=SYSUTCDATETIME() WHERE id=? AND listing_id=?", Validation.id(id), listing) != 1) {
                     throw new IllegalArgumentException("Biến thể không tồn tại.");

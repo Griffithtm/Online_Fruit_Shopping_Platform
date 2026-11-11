@@ -92,11 +92,29 @@
                         </form>
                     </c:if>
                     <c:if test="${l.status != 'PENDING_REVIEW' && l.status != 'RETIRED'}">
-                        <a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
+                        <c:if test="${l.status != 'DRAFT'}">
+                        <form method="post"
+                              action="${pageContext.request.contextPath}/seller"
+                              class="d-inline"
+                              onsubmit="return confirm('Bạn có chắc muốn ngừng kinh doanh sản phẩm này? Sản phẩm sẽ không còn hiển thị công khai.');">
+
+                            <input type="hidden" name="csrf"
+                                   value="${sessionScope.csrf}">
+
+                            <input type="hidden" name="action"
+                                   value="retireListing">
+
+                            <input type="hidden" name="id"
+                                   value="${l.id}">
+
+                            <button type="submit" class="button">
+                                Ngừng kinh doanh
+                            </button>
+                        </form></c:if><a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
                     </c:if>
                     <c:if test="${l.status == 'PENDING_REVIEW'}"><span class="text-muted">Đang chờ Admin duyệt</span></c:if>
-                </td>
-            </tr>
+                    </td>
+                </tr>
         </c:forEach>
     </table>
 </div>

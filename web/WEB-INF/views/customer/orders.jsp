@@ -18,29 +18,6 @@
     </div>
 
     <%-- Liên kết chức năng --%>
-    <div class="orders-shortcuts">
-        <a href="${pageContext.request.contextPath}/refunds">
-            <span class="shortcut-icon refund-icon">
-                <i class="fas fa-undo-alt"></i>
-            </span>
-            <span>
-                <strong>Yêu cầu hoàn tiền</strong>
-                <small>Quản lý yêu cầu hoàn tiền</small>
-            </span>
-            <i class="fas fa-chevron-right shortcut-arrow"></i>
-        </a>
-
-        <a href="${pageContext.request.contextPath}/wallet">
-            <span class="shortcut-icon wallet-icon">
-                <i class="fas fa-coins"></i>
-            </span>
-            <span>
-                <strong>Điểm thưởng</strong>
-                <small>Kiểm tra và sử dụng điểm thưởng</small>
-            </span>
-            <i class="fas fa-chevron-right shortcut-arrow"></i>
-        </a>
-    </div>
 
     <%-- Tìm kiếm --%>
     <div class="orders-search">
@@ -312,7 +289,9 @@
                                             <c:out value="${vi:label(p.status)}"/>
                                         </span>
                                         <small>
-                                            <c:out value="${p.createdAt}"/>
+                                            <fmt:formatDate
+                                                value="${p.createdAt}"
+                                                pattern="dd/MM/yyyy HH:mm"/>
                                             giờ quốc tế
                                         </small>
                                     </div>
@@ -327,7 +306,9 @@
                     <i class="fas fa-truck"></i>
                     <span>Dự kiến giao hàng</span>
                     <strong>
-                        <c:out value="${o.estimatedDeliveryAt}"/>
+                        <fmt:formatDate
+                            value="${o.estimatedDeliveryAt}"
+                            pattern="dd/MM/yyyy HH:mm"/>
                         giờ quốc tế
                     </strong>
                 </div>
@@ -346,31 +327,33 @@
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const search = document.getElementById("orderSearch");
-    const orderList = document.getElementById("orderList");
-    const noResult = document.getElementById("orderNoResult");
+    document.addEventListener("DOMContentLoaded", () => {
+        const search = document.getElementById("orderSearch");
+        const orderList = document.getElementById("orderList");
+        const noResult = document.getElementById("orderNoResult");
 
-    if (!search || !orderList) return;
+        if (!search || !orderList)
+            return;
 
-    const cards = orderList.querySelectorAll(".my-order-card");
+        const cards = orderList.querySelectorAll(".my-order-card");
 
-    search.addEventListener("input", () => {
-        const keyword = search.value.trim().toLowerCase();
-        let visibleCount = 0;
+        search.addEventListener("input", () => {
+            const keyword = search.value.trim().toLowerCase();
+            let visibleCount = 0;
 
-        cards.forEach(card => {
-            const matched = card.textContent.toLowerCase().includes(keyword);
-            card.hidden = !matched;
+            cards.forEach(card => {
+                const matched = card.textContent.toLowerCase().includes(keyword);
+                card.hidden = !matched;
 
-            if (matched) visibleCount++;
+                if (matched)
+                    visibleCount++;
+            });
+
+            if (noResult) {
+                noResult.hidden = visibleCount > 0 || keyword === "";
+            }
         });
-
-        if (noResult) {
-            noResult.hidden = visibleCount > 0 || keyword === "";
-        }
     });
-});
 </script>
 
 <%@ include file="/WEB-INF/views/footer.jsp" %>

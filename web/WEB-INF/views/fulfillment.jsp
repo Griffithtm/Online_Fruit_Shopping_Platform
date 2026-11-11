@@ -54,17 +54,6 @@
                 </div>
             </form>
 
-            <a href="${pageContext.request.contextPath}/seller/promotions"
-               class="promotion-shortcut">
-                <span class="shortcut-icon">
-                    <i class="fas fa-tags"></i>
-                </span>
-                <span>
-                    <strong>Khuyến mãi cửa hàng</strong>
-                    <small>Quản lý chiến dịch khuyến mãi</small>
-                </span>
-                <i class="fas fa-chevron-right shortcut-arrow"></i>
-            </a>
         </div>
     </c:if>
 
@@ -236,7 +225,7 @@
                         </h3>
 
                         <div class="financial-row">
-                            <span>Tổng tạm tính</span>
+                            <span>Tổng tiền ban đầu</span>
                             <strong>
                                 <fmt:formatNumber value="${o.subtotal}"/> đ
                             </strong>
