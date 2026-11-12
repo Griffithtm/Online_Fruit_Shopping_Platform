@@ -216,7 +216,7 @@
                     </div>
 
                     <div class="my-order-original-total">
-                        <span>Tổng tiền ban đầu</span>
+                        <span>Tổng tiền:</span>
                         <strong>
                             <fmt:formatNumber value="${o.payableAmount}"/> đ
                         </strong>
