@@ -19,7 +19,7 @@
         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/style.css">
         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/freshora.css?v=2">
         <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/notifications.css">
-        <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/reviews.css">
+        <link rel="stylesheet" href="${pageContext.request.contextPath}/assets/css/reviews.css?v=2">
 
     </head>
 
