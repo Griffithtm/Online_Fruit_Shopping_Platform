@@ -40,6 +40,23 @@ public class SellerService {
         }
     }
 
+    public List<Listing> variantListings(long uid) throws Exception {
+        try (Connection c = new DBConnect().getConnection()) {
+            return Database.rows(
+                    Listing.class,
+                    c,
+                    """
+            SELECT *
+            FROM listings
+            WHERE store_id = ?
+              AND status <> 'RETIRED'
+            ORDER BY id DESC
+            """,
+                    store(c, uid)
+            );
+        }
+    }
+
     public List<VariantDetails> variants(long uid) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
             return Database.rows(VariantDetails.class, c, "SELECT v.*,l.title,COALESCE(st.available_qty,0) AS available_qty FROM variants v JOIN listings l ON l.id=v.listing_id LEFT JOIN v_available_stock st ON st.variant_id=v.id WHERE l.store_id=? ORDER BY v.id DESC", store(c, uid));
@@ -85,28 +102,45 @@ public class SellerService {
 
     public void retireListing(long uid, long listingId) throws Exception {
         try (Connection c = new DBConnect().getConnection()) {
-            long sid = store(c, uid);
+            c.setAutoCommit(false);
 
-            int updated = Database.update(
-                    c,
-                    """
-            UPDATE listings
-            SET status = 'RETIRED',
-                updated_at = SYSUTCDATETIME()
-            WHERE id = ?
-              AND store_id = ?
-              AND status IN ('DRAFT', 'PUBLISHED', 'SUSPENDED')
-            """,
-                    listingId,
-                    sid
-            );
+            try {
+                long sid = store(c, uid);
 
-            if (updated != 1) {
-                throw new IllegalArgumentException(
-                        "Không thể ngừng kinh doanh sản phẩm này. "
-                        + "Sản phẩm không tồn tại, không thuộc cửa hàng "
-                        + "hoặc đang chờ Admin duyệt."
+                int updated = Database.update(
+                        c,
+                        """
+                UPDATE listings
+                SET status = 'RETIRED',
+                    updated_at = SYSUTCDATETIME()
+                WHERE id = ?
+                  AND store_id = ?
+                  AND status IN ('DRAFT', 'PUBLISHED', 'SUSPENDED')
+                """,
+                        listingId, sid
                 );
+
+                if (updated != 1) {
+                    throw new IllegalArgumentException(
+                            "Không thể ngừng kinh doanh tin đăng này."
+                    );
+                }
+
+                Database.update(
+                        c,
+                        """
+                UPDATE variants
+                SET status = 'RETIRED'
+                WHERE listing_id = ?
+                  AND status <> 'RETIRED'
+                """,
+                        listingId
+                );
+
+                c.commit();
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
             }
         }
     }
@@ -117,6 +151,11 @@ public class SellerService {
             Listing ownedListing = Database.one(Listing.class, c, "SELECT * FROM listings WHERE id=? AND store_id=?", listing, sid);
             if (ownedListing == null) {
                 throw new IllegalArgumentException("Tin đăng không thuộc cửa hàng.");
+            }
+            if ("RETIRED".equals(ownedListing.getStatus())) {
+                throw new IllegalArgumentException(
+                        "Tin đăng đã ngừng kinh doanh, không thể tạo hoặc chỉnh sửa biến thể."
+                );
             }
             if ("PENDING_REVIEW".equals(ownedListing.getStatus())) {
                 throw new IllegalArgumentException("Tin đăng đang chờ Admin duyệt, không thể chỉnh sửa biến thể lúc này.");

@@ -20,6 +20,7 @@ public class SellerServlet extends BaseServlet {
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {
         try {
             r.setAttribute("listings", service.listings(uid(r)));
+            r.setAttribute("variantListings", service.variantListings(uid(r)));
             r.setAttribute("variants", service.variants(uid(r)));
             r.setAttribute("batches", service.batches(uid(r)));
             r.setAttribute("categories", new CatalogService().categories());

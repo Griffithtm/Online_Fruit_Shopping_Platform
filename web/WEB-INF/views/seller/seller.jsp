@@ -20,10 +20,11 @@
             </label>
             <label>Danh mục
                 <select class="form-select" name="category" required>
-                    <c:forEach items="${categories}" var="x">
-                        <option value="${x.id}" ${editListing.categoryId == x.id ? 'selected' : ''}>
-                            <c:out value="${x.name}" /> (#${x.id})</option>
-                        </c:forEach>
+                    <c:forEach items="${variantListings}" var="l">
+                        <option value="${l.id}">
+                            ${l.title} (#${l.id})
+                        </option>
+                    </c:forEach>
                 </select>
             </label>
             <label>Xuất xứ
@@ -93,24 +94,24 @@
                     </c:if>
                     <c:if test="${l.status != 'PENDING_REVIEW' && l.status != 'RETIRED'}">
                         <c:if test="${l.status != 'DRAFT'}">
-                        <form method="post"
-                              action="${pageContext.request.contextPath}/seller"
-                              class="d-inline"
-                              onsubmit="return confirm('Bạn có chắc muốn ngừng kinh doanh sản phẩm này? Sản phẩm sẽ không còn hiển thị công khai.');">
+                            <form method="post"
+                                  action="${pageContext.request.contextPath}/seller"
+                                  class="d-inline"
+                                  onsubmit="return confirm('Bạn có chắc muốn ngừng kinh doanh sản phẩm này? Sản phẩm sẽ không còn hiển thị công khai.');">
 
-                            <input type="hidden" name="csrf"
-                                   value="${sessionScope.csrf}">
+                                <input type="hidden" name="csrf"
+                                       value="${sessionScope.csrf}">
 
-                            <input type="hidden" name="action"
-                                   value="retireListing">
+                                <input type="hidden" name="action"
+                                       value="retireListing">
 
-                            <input type="hidden" name="id"
-                                   value="${l.id}">
+                                <input type="hidden" name="id"
+                                       value="${l.id}">
 
-                            <button type="submit" class="button">
-                                Ngừng kinh doanh
-                            </button>
-                        </form></c:if><a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
+                                <button type="submit" class="button">
+                                    Ngừng kinh doanh
+                                </button>
+                            </form></c:if><a href="?editListing=${l.id}">Sửa tin đăng</a> · <a href="?images=${l.id}">Sắp xếp ảnh</a>
                     </c:if>
                     <c:if test="${l.status == 'PENDING_REVIEW'}"><span class="text-muted">Đang chờ Admin duyệt</span></c:if>
                     </td>
