@@ -142,8 +142,16 @@ public class SellerService {
         int q = Validation.quantity(qty);
         BigDecimal amount = Validation.money(cost, true);
         LocalDate h = LocalDate.parse(harvest), r = LocalDate.parse(receipt), e = LocalDate.parse(expiry);
-        if (h.isAfter(r) || !r.isBefore(e) || !e.isAfter(LocalDate.now()) || !r.isAfter(LocalDate.now())) {
-            throw new IllegalArgumentException("Harvest date must not exceed receipt date; receipt date must not be in the future; expiry date must be in the future.");
+        if (h.isAfter(r)
+                || !r.isBefore(e)
+                || !e.isAfter(LocalDate.now())
+                || r.isAfter(LocalDate.now())) {
+
+            throw new IllegalArgumentException(
+                    "Ngày thu hoạch không được sau ngày nhập kho; "
+                    + "ngày nhập kho không được sau ngày hiện tại; "
+                    + "ngày hết hạn phải sau ngày hiện tại."
+            );
         }
         try (Connection c = new DBConnect().getConnection()) {
             c.setAutoCommit(false);

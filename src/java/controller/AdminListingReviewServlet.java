@@ -18,7 +18,7 @@ import java.util.*;
 @WebServlet("/admin/listing-reviews")
 public class AdminListingReviewServlet extends BaseServlet {
     private static final int PAGE_SIZE = 20;
-    private static final Set<String> STATUSES = Set.of("ALL", "PENDING_REVIEW", "PUBLISHED", "SUSPENDED", "HIDDEN", "DRAFT", "RETIRED");
+    private static final Set<String> STATUSES = Set.of("ALL", "PENDING_REVIEW", "PUBLISHED", "SUSPENDED", "DRAFT", "RETIRED");
 
     @Override
     protected void doGet(HttpServletRequest r, HttpServletResponse s) throws ServletException, IOException {

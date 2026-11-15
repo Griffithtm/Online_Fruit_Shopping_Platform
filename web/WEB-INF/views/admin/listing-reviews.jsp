@@ -14,7 +14,6 @@
                     <option value="PENDING_REVIEW" ${filterStatus == 'PENDING_REVIEW' ? 'selected' : ''}>Chờ duyệt lại</option>
                     <option value="PUBLISHED" ${filterStatus == 'PUBLISHED' ? 'selected' : ''}>Đang công khai</option>
                     <option value="SUSPENDED" ${filterStatus == 'SUSPENDED' ? 'selected' : ''}>Đình chỉ</option>
-                    <option value="HIDDEN" ${filterStatus == 'HIDDEN' ? 'selected' : ''}>Đang ẩn</option>
                     <option value="DRAFT" ${filterStatus == 'DRAFT' ? 'selected' : ''}>Bản nháp</option>
                     <option value="RETIRED" ${filterStatus == 'RETIRED' ? 'selected' : ''}>Ngừng kinh doanh</option>
                     <option value="ALL" ${filterStatus == 'ALL' ? 'selected' : ''}>Tất cả</option>

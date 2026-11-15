@@ -23,7 +23,8 @@ public abstract class BaseServlet extends HttpServlet {
                 "seller/seller";
             case "checkout", "orders", "account", "cart", "compare", "product", "products", "shops" ->
                 "customer/" + name;
-            case "fulfillment", "promotions", "wallet", "refunds", "payment" -> name;
+            case "fulfillment", "promotions", "wallet", "refunds", "payment" ->
+                name;
             case "home" ->
                 "home";
             default ->
@@ -38,6 +39,12 @@ public abstract class BaseServlet extends HttpServlet {
 
     protected String error(Exception e) {
         getServletContext().log("Freshora request failed", e);
-        return e instanceof IllegalArgumentException && e.getMessage() != null && e.getMessage().matches("(?s).*[À-ỹ].*") ? e.getMessage() : "Không thể lưu dữ liệu. Kiểm tra dữ liệu trùng, ràng buộc hoặc thử lại.";
+
+        if (e instanceof IllegalArgumentException
+                && e.getMessage() != null) {
+            return e.getMessage();
+        }
+
+        return "Không thể lưu dữ liệu. Kiểm tra dữ liệu trùng, ràng buộc hoặc thử lại.";
     }
 }
