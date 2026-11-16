@@ -20,9 +20,9 @@
             </label>
             <label>Danh mục
                 <select class="form-select" name="category" required>
-                    <c:forEach items="${variantListings}" var="l">
-                        <option value="${l.id}">
-                            ${l.title} (#${l.id})
+                    <c:forEach items="${categories}" var="c">
+                        <option value="${c.id}">
+                            ${c.name} (#${c.id})
                         </option>
                     </c:forEach>
                 </select>
@@ -46,10 +46,11 @@
             </label>
             <label>Tin đăng
                 <select class="form-select" name="listing" required>
-                    <c:forEach items="${listings}" var="x">
-                        <option value="${x.id}" ${editVariant.listingId == x.id ? 'selected' : ''}>
-                            <c:out value="${x.title}" /> (#${x.id})</option>
-                        </c:forEach>
+                    <c:forEach items="${variantListings}" var="l">
+                        <option value="${l.id}">
+                            ${l.title} (#${l.id})
+                        </option>
+                    </c:forEach>
                 </select>
             </label>
             <label>Quy cách (gói 1kg, hộp 500g...)
